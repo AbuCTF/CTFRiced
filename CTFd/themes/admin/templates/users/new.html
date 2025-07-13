@@ -1,0 +1,29 @@
+{% extends "admin/base.html" %}
+
+{% block stylesheets %}
+{% endblock %}
+
+{% block content %}
+	<div class="jumbotron">
+		<div class="container">
+			<h1>
+				Create User
+			</h1>
+		</div>
+	</div>
+
+	<div class="container">
+		<div class="row">
+			<div class="col-md-6 offset-md-3">
+				{% include "admin/modals/users/create.html" %}
+			</div>
+		</div>
+	</div>
+{% endblock %}
+
+{% block scripts %}
+{% endblock %}
+
+{% block entrypoint %}
+	{{ Assets.js("assets/js/pages/user.js", theme="admin") }}
+{% endblock %}

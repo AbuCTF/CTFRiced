@@ -1,0 +1,34 @@
+{% extends "challenge.html" %}
+
+{% block description %}
+  <div class="mb-3">{{ challenge.description | markdown | safe | trim }}</div>
+
+  {% for points in challenge.first_blood_bonus %}
+    <p class="text-muted">
+      <strong>Bonus for {{ (loop.index0 + 1)|ordinalize }} solve:</strong> {{ points }} points
+    </p>
+  {% endfor %}
+{% endblock %}
+
+{% block input %}
+  <input
+      id="challenge-id" class="challenge-id" type="hidden"
+      value="{{ challenge.id }}"
+  >
+  <input
+      id="challenge-input" class="challenge-input form-control"
+      type="text" name="submission"
+      @keyup.enter="submitChallenge()"
+      placeholder="{% trans %}Flag{% endtrans %}" x-model="submission"
+  >
+{% endblock %}
+
+{% block submit %}
+  <button
+      id="challenge-submit"
+      class="challenge-submit btn btn-primary w-100 h-100" type="submit"
+      @click.debounce.500ms="submitChallenge()"
+  >
+    {% trans %}Submit{% endtrans %}
+  </button>
+{% endblock %}

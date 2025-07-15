@@ -6,7 +6,26 @@
       <h1 id="team-id" data-ctfd-team-id="{{ team.id }}">{{ team.name }}</h1>
 
       {% if team.oauth_id %}
-        <a href="https://majorleaguecyber.org/t/{{ team.name }}">
+           </div>
+        <div class="col-md-6 d-none d-md-block d-lg-block py-4">
+          <div class="progress">
+            <template x-for="category in solves && solves.data ? getCategoryBreakdown() : []" :key="category.name">
+              <div 
+                class="progress-bar" 
+                role="progressbar" 
+                :style="{ width: `${category.percent}%`, 'background-color': category.color }"
+              >
+              </div>
+            </template>
+          </div>
+          <template x-for="category in solves && solves.data ? getCategoryBreakdown() : []" :key="category.name">
+            <div class="ps-2 float-start">
+              <svg height="16" width="16">
+                <circle cx="8" cy="8" r="5" :fill="category.color" />
+              </svg>
+              <small x-text="`${category.name} (${category.percent}%)`"></small>
+            </div>
+          </template>//majorleaguecyber.org/t/{{ team.name }}">
           <h3 class="d-inline-block mx-1"><span class="badge bg-primary rounded-pill">{% trans %}Official{% endtrans %}</span></h3>
         </a>
       {% endif %}

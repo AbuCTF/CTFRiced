@@ -446,7 +446,7 @@
         </div>
         <div class="col-md-6 d-none d-md-block d-lg-block py-4">
           <div class="progress">
-            <template x-for="category in getCategoryBreakdown()" :key="category.name">
+            <template x-for="category in solves && solves.data ? getCategoryBreakdown() : []" :key="category.name">
               <div 
                 class="progress-bar" 
                 role="progressbar" 
@@ -455,7 +455,7 @@
               </div>
             </template>
           </div>
-          <template x-for="category in getCategoryBreakdown()" :key="category.name">
+          <template x-for="category in solves && solves.data ? getCategoryBreakdown() : []" :key="category.name">
             <div class="ps-2 float-start">
               <svg height="16" width="16">
                 <circle cx="8" cy="8" r="5" :fill="category.color" />

@@ -23,6 +23,10 @@ Alpine.data("UserGraphs", () => ({
   },
 
   getCategoryBreakdown() {
+    if (!this.solves || !this.solves.data) {
+      return [];
+    }
+    
     const categories = [];
     const breakdown = {};
 

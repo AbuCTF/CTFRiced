@@ -24,6 +24,10 @@ Alpine.data("TeamGraphs", () => ({
   },
 
   getCategoryBreakdown() {
+    if (!this.solves || !this.solves.data) {
+      return [];
+    }
+    
     const categories = [];
     const breakdown = {};
 

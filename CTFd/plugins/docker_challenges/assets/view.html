@@ -1,0 +1,330 @@
+{% extends "challenge.html" %}
+
+{% block head %}
+{{ super() }}
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+<meta http-equiv="Pragma" content="no-cache">
+<meta http-equiv="Expires" content="0">
+{% endblock %}
+
+{% block stylesheets %}
+{{ super() }}
+<style>
+.docker-challenge-container {
+    background: linear-gradient(135deg, rgba(15, 20, 25, 0.98) 0%, rgba(25, 30, 35, 0.95) 100%);
+    border: 1px solid rgba(64, 75, 85, 0.3);
+    border-radius: 6px;
+    padding: 20px;
+    margin: 16px 0;
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.25);
+    backdrop-filter: blur(8px);
+    position: relative;
+}
+
+.docker-challenge-container::before {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 2px;
+    background: linear-gradient(90deg, transparent, rgba(59, 130, 246, 0.6), transparent);
+    border-radius: 6px 6px 0 0;
+}
+
+.docker-challenge-container .description {
+    color: #9ca3af;
+    font-size: 13px;
+    text-align: center;
+    margin-bottom: 18px;
+    font-weight: 400;
+    letter-spacing: 0.2px;
+}
+
+/* Control Panel */
+.docker-control-panel {
+    text-align: center;
+}
+
+.docker-launch-section {
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    margin-bottom: 16px;
+}
+
+.status-indicator {
+    color: #9ca3af;
+    font-size: 12px;
+    margin-top: 8px;
+}
+
+/* Connection Section */
+.connection-section {
+    margin: 16px 0;
+    padding: 14px;
+    background: rgba(17, 24, 39, 0.6);
+    border-radius: 4px;
+    border: 1px solid rgba(75, 85, 99, 0.2);
+}
+
+.connection-header {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 8px;
+    margin-bottom: 10px;
+}
+
+.connection-header h6 {
+    color: #e5e7eb;
+    font-size: 13px;
+    font-weight: 500;
+    margin: 0;
+}
+
+.connection-header i {
+    color: #6b7280;
+    font-size: 12px;
+}
+
+.connection-details {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.connection-item {
+    text-align: center;
+}
+
+.connection-command {
+    background: rgba(17, 24, 39, 0.8);
+    color: #10b981;
+    padding: 8px 14px;
+    border-radius: 4px;
+    font-family: 'JetBrains Mono', 'Monaco', monospace;
+    font-size: 13px;
+    letter-spacing: 0.3px;
+    border: 1px solid rgba(75, 85, 99, 0.3);
+    display: inline-block;
+}
+
+/* Timer Section */
+.timer-section {
+    margin: 14px 0;
+    text-align: center;
+}
+
+.timer-context {
+    color: #9ca3af;
+    font-size: 12px;
+    margin-bottom: 6px;
+}
+
+.docker-timer {
+    background: rgba(17, 24, 39, 0.7);
+    border-radius: 4px;
+    padding: 10px;
+    border: 1px solid rgba(75, 85, 99, 0.3);
+    display: inline-block;
+    min-width: 70px;
+}
+
+.timer-value {
+    color: #f59e0b;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 14px;
+    font-weight: 600;
+}
+
+/* Actions Section */
+.docker-actions {
+    display: flex;
+    gap: 10px;
+    justify-content: center;
+    flex-wrap: wrap;
+    margin-top: 12px;
+}
+
+/* Loading State */
+.docker-loading {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 10px;
+    padding: 16px;
+}
+
+.loading-spinner i {
+    color: #3b82f6;
+    font-size: 20px;
+}
+
+.loading-text {
+    color: #9ca3af;
+    font-size: 13px;
+}
+
+/* Toast Notifications */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 10000;
+}
+
+.toast {
+    background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+    color: white;
+    padding: 10px 16px;
+    border-radius: 4px;
+    font-size: 13px;
+    font-weight: 500;
+    box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+    animation: slideIn 0.3s ease-out;
+}
+
+@keyframes slideIn {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
+    }
+    to {
+        transform: translateX(0);
+        opacity: 1;
+    }
+}
+
+/* Responsive Design */
+@media (max-width: 768px) {
+    .docker-challenge-container {
+        padding: 16px;
+        margin: 12px 0;
+    }
+    
+    .docker-actions {
+        flex-direction: column;
+        align-items: center;
+    }
+    
+    .docker-btn,
+    .docker-launch-btn {
+        width: 100%;
+        max-width: 180px;
+    }
+}
+
+/* Additional specificity overrides for CTFd */
+.docker-challenge-container button.docker-launch-btn,
+.docker-challenge-container input[type="button"].docker-launch-btn {
+    all: unset !important;
+    background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%) !important;
+    border: none !important;
+    border-radius: 4px !important;
+    color: #ffffff !important;
+    padding: 10px 20px !important;
+    font-size: 13px !important;
+    font-weight: 500 !important;
+    cursor: pointer !important;
+    transition: all 0.2s ease !important;
+    display: inline-flex !important;
+    align-items: center !important;
+    justify-content: center !important;
+    min-width: 140px !important;
+    box-shadow: 0 1px 3px rgba(30, 64, 175, 0.4) !important;
+    text-decoration: none !important;
+    text-transform: none !important;
+    font-family: inherit !important;
+    line-height: 1 !important;
+    outline: none !important;
+    position: relative !important;
+    overflow: hidden !important;
+}
+
+.docker-challenge-container button.docker-launch-btn:hover,
+.docker-challenge-container input[type="button"].docker-launch-btn:hover {
+    background: linear-gradient(135deg, #1d4ed8 0%, #2563eb 100%) !important;
+    transform: translateY(-1px) !important;
+    box-shadow: 0 2px 6px rgba(30, 64, 175, 0.5) !important;
+    color: #ffffff !important;
+}
+</style>
+{% endblock %}
+
+{% block description %}
+{{ challenge.html }}
+
+<style>
+.docker-launch-btn {
+    background-color: #1f2937; 
+    border: 1px solid #374151;
+    border-radius: 3px;      
+    color: #f9fafb;      
+    padding: 6px 14px;      
+    font-size: 12px;   
+    font-weight: 500;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    min-width: 100px;       
+    text-decoration: none;
+    transition: background-color 0.15s ease, color 0.15s ease;
+}
+
+.docker-launch-btn:hover {
+    background-color: #111827; 
+    color: #ffffff;      
+}
+
+.docker-launch-btn:active {
+    background-color: #000000;
+}
+
+.docker-launch-btn:focus {
+    outline: none;
+    border-color: #2563eb;
+}
+</style>
+
+<div class="docker-challenge-container" id="docker_container" name="{{ challenge.docker_image | safe }}">
+    <div class="description">Spin up your challenge container.</div>
+    
+    <div class="docker-control-panel">
+        <div class="docker-launch-section">
+            <button onclick="start_container('{{ challenge.docker_image | safe }}');" class="docker-launch-btn">
+                Launch Instance
+            </button>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+
+
+{% block connection_info %}
+{% set conn = challenge.connection_info %}
+{% if conn %}
+<div class="connection-section">
+    <div class="connection-header">
+        <i class="fas fa-plug"></i>
+        <h6>Connection Details</h6>
+    </div>
+    <div class="challenge-connection-info">
+        {{ conn }}
+    </div>
+</div>
+{% endif %}
+{% endblock %}
+
+{% block input %}
+<input id="challenge-id" class="challenge-id" type="hidden" value="{{ challenge.id }}">
+<input id="challenge-input" class="challenge-input form-control" type="text" name="submission" @keyup.enter="submitChallenge()" placeholder="{% trans %}Flag{% endtrans %}" x-model="submission">
+{% endblock %}
+
+{% block submit %}
+<button id="challenge-submit" class="challenge-submit btn btn-primary w-100 h-100" type="submit" @click.debounce.500ms="submitChallenge()">
+    {% trans %}Submit{% endtrans %}
+</button>
+{% endblock %}

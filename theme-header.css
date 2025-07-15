@@ -1,0 +1,279 @@
+<style id="theme-color">
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* CSS Custom Properties */
+:root {
+    --primary-bg: #0f1419;
+    --secondary-bg: #1a1f2e;
+    --accent-color: #64ffda;
+    --text-primary: #e6f1ff;
+    --text-secondary: #8892b0;
+    --card-bg: rgba(26, 31, 46, 0.85);
+    --border-color: rgba(100, 255, 218, 0.1);
+    --shadow-color: rgba(0, 0, 0, 0.4);
+    --gradient-bg: linear-gradient(135deg, #0f1419 0%, #1a1f2e 100%);
+    --transition-smooth: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* Light Mode Variables */
+[data-bs-theme="light"] {
+    --primary-bg: #ffffff;
+    --secondary-bg: #f8fafc;
+    --accent-color: #0ea5e9;
+    --text-primary: #0f172a;
+    --text-secondary: #334155;
+    --card-bg: rgba(255, 255, 255, 0.95);
+    --border-color: rgba(69, 174, 222, 0.1);
+    --shadow-color: rgba(42, 37, 176, 0.05);
+    --gradient-bg: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
+}
+
+/* Global Styles */
+* {
+    box-sizing: border-box;
+}
+
+html, body {
+    background: var(--gradient-bg);
+    color: var(--text-primary);
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    line-height: 1.6;
+    overflow-x: hidden;
+    min-height: 100vh;
+    transition: background-color 0.4s ease, color 0.4s ease;
+}
+
+/* Page Load Animation */
+body {
+    opacity: 0;
+    animation: fadeIn 0.8s ease-out forwards;
+}
+@keyframes fadeIn {
+    to { opacity: 1; }
+}
+
+/* Navbar Base */
+.navbar {
+    background-color: var(--primary-bg) !important;
+    border-bottom: 1px solid var(--border-color);
+    backdrop-filter: blur(10px);
+    box-shadow: 0 1px 3px var(--shadow-color);
+}
+
+.navbar-brand {
+    font-family: 'JetBrains Mono', monospace;
+    font-weight: 500;
+    color: var(--accent-color) !important;
+}
+
+.navbar-nav .nav-link {
+    color: var(--text-secondary) !important;
+    font-weight: 400;
+    position: relative;
+    transition: var(--transition-smooth);
+}
+
+.navbar-nav .nav-link:hover {
+    color: var(--accent-color) !important;
+}
+
+.navbar-nav .nav-item:not(.dropdown) .nav-link::after {
+    content: '';
+    position: absolute;
+    bottom: -2px;
+    left: 50%;
+    width: 0;
+    height: 2px;
+    background-color: var(--accent-color);
+    transition: var(--transition-smooth);
+    transform: translateX(-50%);
+}
+
+.navbar-nav .nav-item:not(.dropdown) .nav-link:hover::after {
+    width: 100%;
+}
+
+
+/* Card Styling */
+.card {
+    background: var(--card-bg);
+    border: 1px solid var(--border-color);
+    border-radius: 12px;
+    box-shadow: 0 4px 6px var(--shadow-color);
+    backdrop-filter: blur(10px);
+    transition: var(--transition-smooth);
+}
+
+.card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 8px 25px var(--shadow-color);
+    border-color: var(--accent-color);
+}
+
+/* Buttons */
+.btn-primary {
+    background: var(--accent-color);
+    color: var(--primary-bg);
+    border: none;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: var(--transition-smooth);
+}
+
+.btn-primary:hover {
+    transform: scale(1.05);
+    box-shadow: 0 2px 8px rgba(100, 255, 218, 0.25);
+}
+
+.btn-outline-primary {
+    border: 2px solid var(--accent-color);
+    color: var(--accent-color);
+}
+
+.btn-outline-primary:hover {
+    background: var(--accent-color);
+    color: var(--primary-bg);
+}
+
+/* Tables & Forms */
+.table, .form-control {
+    color: var(--text-primary);
+    background: var(--card-bg);
+    border-color: var(--border-color);
+}
+
+/* Fix text contrast issues in popups/modals */
+.modal-content, .modal-body, .modal-title {
+    color: var(--text-primary) !important;
+}
+
+.alert, .alert * {
+    color: var(--text-primary) !important;
+}
+
+/* Fix text contrast in any popup or overlay */
+.popup, .overlay, .tooltip, .dropdown-menu {
+    color: var(--text-primary) !important;
+}
+
+/* Docker Container Information Fixes */
+#docker_container {
+    color: var(--text-primary) !important;
+    background: var(--card-bg) !important;
+    border-radius: 8px !important;
+    padding: 1rem !important;
+    margin: 1rem 0 !important;
+}
+
+#docker_container pre {
+    color: var(--text-primary) !important;
+    background: var(--secondary-bg) !important;
+    border: 1px solid var(--border-color) !important;
+    padding: 1rem !important;
+    border-radius: 6px !important;
+    font-family: 'JetBrains Mono', monospace !important;
+    font-size: 0.9rem !important;
+    line-height: 1.4 !important;
+}
+
+#docker_container div[id*="_revert_container"] {
+    color: var(--text-primary) !important;
+    background: var(--card-bg) !important;
+    padding: 0.5rem !important;
+    border-radius: 6px !important;
+    margin-top: 0.5rem !important;
+    font-weight: 500 !important;
+    text-align: center !important;
+}
+
+#docker_container .btn {
+    margin: 0.25rem !important;
+    font-weight: 500 !important;
+}
+
+/* Challenge Connection Info */
+.challenge-connection-info {
+    color: var(--text-primary) !important;
+    background: var(--secondary-bg) !important;
+    border: 1px solid var(--border-color) !important;
+    padding: 1rem !important;
+    border-radius: 6px !important;
+    margin: 1rem 0 !important;
+}
+
+.challenge-connection-info a {
+    color: var(--accent-color) !important;
+    text-decoration: underline !important;
+}
+
+.challenge-connection-info a:hover {
+    color: var(--text-primary) !important;
+    background: var(--accent-color) !important;
+    text-decoration: none !important;
+    padding: 0.25rem 0.5rem !important;
+    border-radius: 4px !important;
+}
+
+/* Ensure all text in containers is visible */
+.container, .container-fluid, .row, .col, div, span, p, h1, h2, h3, h4, h5, h6 {
+    color: var(--text-primary);
+}
+
+/* Fix form elements text contrast */
+.form-control, .form-select, .form-check-label {
+    color: var(--text-primary) !important;
+    background: var(--card-bg) !important;
+    border-color: var(--border-color) !important;
+}
+
+.form-control::placeholder {
+    color: var(--text-secondary) !important;
+    opacity: 0.7 !important;
+}
+
+.form-control:focus, .form-select:focus {
+    color: var(--text-primary) !important;
+    background: var(--card-bg) !important;
+    border-color: var(--accent-color) !important;
+    box-shadow: 0 0 0 0.2rem rgba(100, 255, 218, 0.25) !important;
+}
+
+/* Light theme specific fixes */
+[data-bs-theme="light"] #docker_container {
+    color: var(--text-primary) !important;
+    background: rgba(248, 250, 252, 0.9) !important;
+}
+
+[data-bs-theme="light"] #docker_container pre {
+    color: var(--text-primary) !important;
+    background: rgba(241, 245, 249, 0.9) !important;
+    border: 1px solid rgba(226, 232, 240, 0.8) !important;
+}
+
+[data-bs-theme="light"] #docker_container div[id*="_revert_container"] {
+    color: var(--text-primary) !important;
+    background: rgba(248, 250, 252, 0.9) !important;
+}
+
+[data-bs-theme="light"] .challenge-connection-info {
+    color: var(--text-primary) !important;
+    background: rgba(241, 245, 249, 0.9) !important;
+    border: 1px solid rgba(226, 232, 240, 0.8) !important;
+}
+
+[data-bs-theme="light"] .form-control, 
+[data-bs-theme="light"] .form-select {
+    color: var(--text-primary) !important;
+    background: rgba(255, 255, 255, 0.9) !important;
+    border-color: rgba(226, 232, 240, 0.8) !important;
+}
+
+/* Subtle Background Pattern */
+body::before {
+    content: '';
+    position: fixed;
+    top: 0; left: 0; right: 0; bottom: 0;
+    background: radial-gradient(circle, rgba(100, 255, 218, 0.02) 0%, transparent 50%);
+    z-index: -2;
+}
+</style>

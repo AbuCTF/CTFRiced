@@ -175,11 +175,17 @@ def define_docker_status(app):
         docker_tracker = DockerChallengeTracker.query.all()
         for i in docker_tracker:
             if is_teams_mode():
-                name = Teams.query.filter_by(id=i.team_id).first()
-                i.team_id = name.name if name else f"Unknown Team ({i.team_id})"
+                if i.team_id is not None:
+                    name = Teams.query.filter_by(id=i.team_id).first()
+                    i.team_id = name.name if name else f"Unknown Team ({i.team_id})"
+                else:
+                    i.team_id = "Unknown Team (None)"
             else:
-                name = Users.query.filter_by(id=i.user_id).first()
-                i.user_id = name.name if name else f"Unknown User ({i.user_id})"
+                if i.user_id is not None:
+                    name = Users.query.filter_by(id=i.user_id).first()
+                    i.user_id = name.name if name else f"Unknown User ({i.user_id})"
+                else:
+                    i.user_id = "Unknown User (None)"
         return render_template("admin_docker_status.html", dockers=docker_tracker)
 
     app.register_blueprint(admin_docker_status)
@@ -593,7 +599,7 @@ class ContainerAPI(Resource):
             session = get_current_team()
             # First we'll delete all old docker containers (+2 hours)
             for i in containers:
-                if int(session.id) == int(i.team_id) and (unix_time(datetime.utcnow()) - int(i.timestamp)) >= 7200:
+                if i.team_id is not None and int(session.id) == int(i.team_id) and (unix_time(datetime.utcnow()) - int(i.timestamp)) >= 7200:
                     delete_container(docker, i.instance_id)
                     DockerChallengeTracker.query.filter_by(instance_id=i.instance_id).delete()
                     db.session.commit()
@@ -601,7 +607,7 @@ class ContainerAPI(Resource):
         else:
             session = get_current_user()
             for i in containers:
-                if int(session.id) == int(i.user_id) and (unix_time(datetime.utcnow()) - int(i.timestamp)) >= 7200:
+                if i.user_id is not None and int(session.id) == int(i.user_id) and (unix_time(datetime.utcnow()) - int(i.timestamp)) >= 7200:
                     delete_container(docker, i.instance_id)
                     DockerChallengeTracker.query.filter_by(instance_id=i.instance_id).delete()
                     db.session.commit()
@@ -631,8 +637,14 @@ class ContainerAPI(Resource):
         # Check if a container is already running for this user. We need to recheck the DB first
         containers = DockerChallengeTracker.query.all()
         for i in containers:
-            if int(session.id) == int(i.user_id):
-                return abort(403,f"Another container is already running for challenge:<br><i><b>{i.challenge}</b></i>.<br>Please stop this first.<br>You can only run one container.")
+            if is_teams_mode():
+                # In teams mode, check team_id
+                if i.team_id is not None and int(session.id) == int(i.team_id):
+                    return abort(403,f"Another container is already running for challenge:<br><i><b>{i.challenge}</b></i>.<br>Please stop this first.<br>You can only run one container.")
+            else:
+                # In user mode, check user_id
+                if i.user_id is not None and int(session.id) == int(i.user_id):
+                    return abort(403,f"Another container is already running for challenge:<br><i><b>{i.challenge}</b></i>.<br>Please stop this first.<br>You can only run one container.")
 
         portsbl = get_unavailable_ports(docker)
         create = create_container(docker, container, session.name, portsbl)

@@ -1,4 +1,7 @@
 import traceback
+import threading
+import time
+from datetime import datetime
 
 from CTFd.plugins.challenges import BaseChallenge, CHALLENGE_CLASSES, get_chal_class
 from CTFd.plugins.flags import get_flag_class
@@ -107,18 +110,15 @@ def define_docker_admin(app):
                 b = DockerConfig()
             try:
                 ca_cert = request.files['ca_cert'].stream.read()
-            except:
-                traceback.print_exc()
+            except Exception:
                 ca_cert = ''
             try:
                 client_cert = request.files['client_cert'].stream.read()
-            except:
-                traceback.print_exc()
+            except Exception:
                 client_cert = ''
             try:
                 client_key = request.files['client_key'].stream.read()
-            except:
-                traceback.print_exc()
+            except Exception:
                 client_key = ''
             if len(ca_cert) != 0: b.ca_cert = ca_cert
             if len(client_cert) != 0: b.client_cert = client_cert
@@ -135,16 +135,14 @@ def define_docker_admin(app):
                 b.client_key = None
             try:
                 b.repositories = ','.join(request.form.to_dict(flat=False)['repositories'])
-            except:
-                traceback.print_exc()
+            except Exception:
                 b.repositories = None
             db.session.add(b)
             db.session.commit()
             docker = DockerConfig.query.filter_by(id=1).first()
         try:
             repos = get_repositories(docker)
-        except:
-            traceback.print_exc()
+        except Exception:
             repos = list()
         if len(repos) == 0:
             form.repositories.choices = [("ERROR", "Failed to Connect to Docker")]
@@ -156,8 +154,7 @@ def define_docker_admin(app):
             if selected_repos == None:
                 selected_repos = list()
         # selected_repos = dconfig.repositories.split(',')
-        except:
-            traceback.print_exc()
+        except Exception:
             selected_repos = []
         return render_template("docker_config.html", config=dconfig, form=form, repos=selected_repos)
 
@@ -244,31 +241,41 @@ class KillContainerAPI(Resource):
             return {"success": False, "message": f"Internal server error: {str(e)}"}, 500
 
 
-def do_request(docker, url, headers=None, method='GET'):
+def do_request(docker, url, headers=None, method='GET', timeout=30):
     tls = docker.tls_enabled
     prefix = 'https' if tls else 'http'
     host = docker.hostname
     URL_TEMPLATE = '%s://%s' % (prefix, host)
+    
     try:
         if tls:
             cert, verify = get_client_cert(docker)
-            if (method == 'GET'):
-                r = requests.get(url=f"%s{url}" % URL_TEMPLATE, cert=cert, verify=verify, headers=headers)
-            elif (method == 'DELETE'):
-                r = requests.delete(url=f"%s{url}" % URL_TEMPLATE, cert=cert, verify=verify, headers=headers)
+            if method == 'GET':
+                r = requests.get(url=f"%s{url}" % URL_TEMPLATE, cert=cert, verify=verify, headers=headers, timeout=timeout)
+            elif method == 'DELETE':
+                r = requests.delete(url=f"%s{url}" % URL_TEMPLATE, cert=cert, verify=verify, headers=headers, timeout=timeout)
+            elif method == 'POST':
+                r = requests.post(url=f"%s{url}" % URL_TEMPLATE, cert=cert, verify=verify, headers=headers, timeout=timeout)
             # Clean up the cert files:
             for file_path in [*cert, verify]:
                 if file_path:
                     Path(file_path).unlink(missing_ok=True)
         else:
-            if (method == 'GET'):
-                r = requests.get(url=f"%s{url}" % URL_TEMPLATE, headers=headers)
-            elif (method == 'DELETE'):
-                r = requests.delete(url=f"%s{url}" % URL_TEMPLATE, headers=headers)
+            if method == 'GET':
+                r = requests.get(url=f"%s{url}" % URL_TEMPLATE, headers=headers, timeout=timeout)
+            elif method == 'DELETE':
+                r = requests.delete(url=f"%s{url}" % URL_TEMPLATE, headers=headers, timeout=timeout)
+            elif method == 'POST':
+                r = requests.post(url=f"%s{url}" % URL_TEMPLATE, headers=headers, timeout=timeout)
         return r
+    except requests.exceptions.Timeout:
+        print(f"Timeout making request to {URL_TEMPLATE}{url}")
+        return None
+    except requests.exceptions.ConnectionError:
+        print(f"Connection error making request to {URL_TEMPLATE}{url}")
+        return None
     except Exception as e:
         print(f"Error making request to {URL_TEMPLATE}{url}: {str(e)}")
-        traceback.print_exc()
         return None
 
 
@@ -278,115 +285,263 @@ def get_client_cert(docker):
         ca = docker.ca_cert
         client = docker.client_cert
         ckey = docker.client_key
-        ca_file = tempfile.NamedTemporaryFile(delete=False)
-        ca_file.write(ca.encode())
-        ca_file.seek(0)
-        client_file = tempfile.NamedTemporaryFile(delete=False)
-        client_file.write(client.encode())
-        client_file.seek(0)
-        key_file = tempfile.NamedTemporaryFile(delete=False)
-        key_file.write(ckey.encode())
-        key_file.seek(0)
+        
+        # Create temporary files with proper cleanup
+        ca_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.pem')
+        ca_file.write(ca)
+        ca_file.close()
+        
+        client_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.pem')
+        client_file.write(client)
+        client_file.close()
+        
+        key_file = tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.pem')
+        key_file.write(ckey)
+        key_file.close()
+        
         CERT = (client_file.name, key_file.name)
-    except:
-        traceback.print_exc()
+    except Exception:
         CERT = None
-    return CERT, ca_file.name
+    return CERT, ca_file.name if 'ca_file' in locals() else None
 
 
 # For the Docker Config Page. Gets the Current Repositories available on the Docker Server.
 def get_repositories(docker, tags=False, repos=False):
-    r = do_request(docker, '/images/json?all=1')
-    result = list()
-    for i in r.json():
-        if not i['RepoTags'] == []:
-            if not i['RepoTags'][0].split(':')[0] == '<none>':
-                if repos:
-                    if not i['RepoTags'][0].split(':')[0] in repos:
-                        continue
-                if not tags:
-                    result.append(i['RepoTags'][0].split(':')[0])
-                else:
-                    result.append(i['RepoTags'][0])
-    return list(set(result))
+    try:
+        r = do_request(docker, '/images/json?all=1')
+        if r is None:
+            print("ERROR: do_request returned None for /images/json")
+            return []
+        
+        if not hasattr(r, 'status_code') or r.status_code != 200:
+            print(f"ERROR: Docker API returned status {r.status_code if hasattr(r, 'status_code') else 'unknown'}")
+            return []
+        
+        result = list()
+        try:
+            images = r.json()
+            for i in images:
+                if not i['RepoTags'] == []:
+                    if not i['RepoTags'][0].split(':')[0] == '<none>':
+                        if repos:
+                            if not i['RepoTags'][0].split(':')[0] in repos:
+                                continue
+                        if not tags:
+                            result.append(i['RepoTags'][0].split(':')[0])
+                        else:
+                            result.append(i['RepoTags'][0])
+        except Exception as e:
+            print(f"ERROR: Failed to parse Docker images response: {str(e)}")
+            return []
+        
+        return list(set(result))
+    except Exception as e:
+        print(f"ERROR in get_repositories(): {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return []
 
 
 def get_unavailable_ports(docker):
-    r = do_request(docker, '/containers/json?all=1')
-    result = list()
-    for i in r.json():
-        if not i['Ports'] == []:
-            for p in i['Ports']:
-                result.append(p['PublicPort'])
-    return result
+    try:
+        r = do_request(docker, '/containers/json?all=1')
+        if r is None:
+            print("ERROR: do_request returned None for /containers/json")
+            return []
+        
+        if not hasattr(r, 'status_code') or r.status_code != 200:
+            print(f"ERROR: Docker API returned status {r.status_code if hasattr(r, 'status_code') else 'unknown'}")
+            return []
+        
+        result = list()
+        try:
+            containers = r.json()
+            for i in containers:
+                if not i['Ports'] == []:
+                    for p in i['Ports']:
+                        if 'PublicPort' in p:
+                            result.append(p['PublicPort'])
+        except Exception as e:
+            print(f"ERROR: Failed to parse Docker containers response: {str(e)}")
+            return []
+        
+        return result
+    except Exception as e:
+        print(f"ERROR in get_unavailable_ports(): {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return []
 
 
 def get_required_ports(docker, image):
-    r = do_request(docker, f'/images/{image}/json?all=1')
-    result = r.json()['Config']['ExposedPorts'].keys()
-    return result
+    try:
+        r = do_request(docker, f'/images/{image}/json?all=1')
+        if r is None:
+            print(f"ERROR: do_request returned None for /images/{image}/json")
+            return []
+        
+        if not hasattr(r, 'status_code') or r.status_code != 200:
+            print(f"ERROR: Docker API returned status {r.status_code if hasattr(r, 'status_code') else 'unknown'}")
+            return []
+        
+        try:
+            image_info = r.json()
+            if 'Config' in image_info and 'ExposedPorts' in image_info['Config'] and image_info['Config']['ExposedPorts']:
+                result = image_info['Config']['ExposedPorts'].keys()
+                return result
+            else:
+                print(f"WARNING: No exposed ports found for image {image}")
+                return []
+        except Exception as e:
+            print(f"ERROR: Failed to parse image info response: {str(e)}")
+            return []
+    except Exception as e:
+        print(f"ERROR in get_required_ports(): {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return []
 
 
 def create_container(docker, image, team, portbl):
-    tls = docker.tls_enabled
-    CERT = None
-    if not tls:
-        prefix = 'http'
-    else:
-        prefix = 'https'
-    host = docker.hostname
-    URL_TEMPLATE = '%s://%s' % (prefix, host)
-    needed_ports = get_required_ports(docker, image)
-    team = hashlib.md5(team.encode("utf-8")).hexdigest()[:10]
-    container_name = "%s_%s" % (image.split(':')[1], team)
-    assigned_ports = dict()
-    for i in needed_ports:
-        while True:
-            assigned_port = random.choice(range(30000, 60000))
-            if assigned_port not in portbl:
-                assigned_ports['%s/tcp' % assigned_port] = {}
-                break
-    ports = dict()
-    bindings = dict()
-    tmp_ports = list(assigned_ports.keys())
-    for i in needed_ports:
-        ports[i] = {}
-        bindings[i] = [{"HostPort": tmp_ports.pop()}]
-    headers = {'Content-Type': "application/json"}
-    data = json.dumps({"Image": image, "ExposedPorts": ports, "HostConfig": {"PortBindings": bindings}})
-    if tls:
-        cert, verify = get_client_cert(docker)
-        r = requests.post(url="%s/containers/create?name=%s" % (URL_TEMPLATE, container_name), cert=cert,
-                      verify=verify, data=data, headers=headers)
-        result = r.json()
-        s = requests.post(url="%s/containers/%s/start" % (URL_TEMPLATE, result['Id']), cert=cert, verify=verify,
-                          headers=headers)
-        # Clean up the cert files:
-        for file_path in [*cert, verify]:
-            if file_path:
-                Path(file_path).unlink(missing_ok=True)
-
-    else:
-        r = requests.post(url="%s/containers/create?name=%s" % (URL_TEMPLATE, container_name),
-                          data=data, headers=headers)
-        print(r.request.method, r.request.url, r.request.body)
-        result = r.json()
-        print(result)
-        # name conflicts are not handled properly
-        s = requests.post(url="%s/containers/%s/start" % (URL_TEMPLATE, result['Id']), headers=headers)
-    return result, data
+    try:
+        tls = docker.tls_enabled
+        CERT = None
+        if not tls:
+            prefix = 'http'
+        else:
+            prefix = 'https'
+        host = docker.hostname
+        URL_TEMPLATE = '%s://%s' % (prefix, host)
+        
+        try:
+            needed_ports = get_required_ports(docker, image)
+        except Exception as e:
+            print(f"ERROR: Failed to get required ports: {str(e)}")
+            raise Exception(f"Failed to get required ports for image {image}")
+        
+        team = hashlib.md5(team.encode("utf-8")).hexdigest()[:10]
+        # Sanitize image name to prevent injection
+        image_safe = image.replace('/', '_').replace(':', '_')
+        container_name = "%s_%s" % (image_safe, team)
+        
+        # Check if container with this name already exists and remove it
+        try:
+            existing_containers_response = do_request(docker, '/containers/json?all=1')
+            if existing_containers_response and hasattr(existing_containers_response, 'status_code') and existing_containers_response.status_code == 200:
+                containers = existing_containers_response.json()
+                for container in containers:
+                    for name in container.get('Names', []):
+                        if name.lstrip('/') == container_name:
+                            try:
+                                # Stop the container first
+                                stop_response = do_request(docker, f'/containers/{container["Id"]}/stop', method='POST')
+                                
+                                # Remove the container
+                                remove_response = do_request(docker, f'/containers/{container["Id"]}?force=true', method='DELETE')
+                                
+                                # Also remove from database if it exists
+                                try:
+                                    DockerChallengeTracker.query.filter_by(instance_id=container['Id']).delete()
+                                    db.session.commit()
+                                except Exception as db_e:
+                                    print(f"Warning: Error removing from database: {str(db_e)}")
+                                
+                            except Exception as rm_e:
+                                print(f"Warning: Error removing existing container: {str(rm_e)}")
+                                # Continue anyway, the create might still work
+                            break
+        except Exception as e:
+            print(f"Warning: Error checking for existing containers: {str(e)}")
+            # Continue anyway
+        
+        assigned_ports = dict()
+        for i in needed_ports:
+            attempts = 0
+            while attempts < 100:  # Prevent infinite loop
+                assigned_port = random.choice(range(30000, 60000))
+                if assigned_port not in portbl:
+                    assigned_ports['%s/tcp' % assigned_port] = {}
+                    break
+                attempts += 1
+            if attempts >= 100:
+                raise Exception("Could not find available port after 100 attempts")
+        
+        ports = dict()
+        bindings = dict()
+        tmp_ports = list(assigned_ports.keys())
+        for i in needed_ports:
+            ports[i] = {}
+            bindings[i] = [{"HostPort": tmp_ports.pop()}]
+        
+        headers = {'Content-Type': "application/json"}
+        data = json.dumps({"Image": image, "ExposedPorts": ports, "HostConfig": {"PortBindings": bindings}})
+        
+        if tls:
+            cert, verify = get_client_cert(docker)
+            r = requests.post(url="%s/containers/create?name=%s" % (URL_TEMPLATE, container_name), cert=cert,
+                          verify=verify, data=data, headers=headers)
+            if r.status_code not in [200, 201]:
+                print(f"ERROR: Container creation failed with status {r.status_code}: {r.text}")
+                raise Exception(f"Container creation failed: {r.text}")
+                
+            result = r.json()
+            
+            s = requests.post(url="%s/containers/%s/start" % (URL_TEMPLATE, result['Id']), cert=cert, verify=verify,
+                              headers=headers)
+            if s.status_code not in [200, 204]:
+                print(f"ERROR: Container start failed with status {s.status_code}: {s.text}")
+                raise Exception(f"Container start failed: {s.text}")
+                
+            # Clean up the cert files:
+            for file_path in [*cert, verify]:
+                if file_path:
+                    Path(file_path).unlink(missing_ok=True)
+        else:
+            r = requests.post(url="%s/containers/create?name=%s" % (URL_TEMPLATE, container_name),
+                              data=data, headers=headers)
+            
+            if r.status_code not in [200, 201]:
+                print(f"ERROR: Container creation failed with status {r.status_code}: {r.text}")
+                raise Exception(f"Container creation failed: {r.text}")
+                
+            result = r.json()
+            
+            # name conflicts are not handled properly
+            s = requests.post(url="%s/containers/%s/start" % (URL_TEMPLATE, result['Id']), headers=headers)
+            if s.status_code not in [200, 204]:
+                print(f"ERROR: Container start failed with status {s.status_code}: {s.text}")
+                raise Exception(f"Container start failed: {s.text}")
+        
+        return result, data
+    except Exception as e:
+        print(f"ERROR in create_container(): {str(e)}")
+        import traceback
+        traceback.print_exc()
+        raise
 
 
 def delete_container(docker, instance_id):
+    """
+    Delete a Docker container by instance ID
+    """
     try:
+        if not instance_id:
+            return False
+            
         headers = {'Content-Type': "application/json"}
         response = do_request(docker, f'/containers/{instance_id}?force=true', headers=headers, method='DELETE')
+        
+        if response is None:
+            print(f"Warning: Failed to connect to Docker API for container {instance_id}")
+            return False
+            
         if hasattr(response, 'status_code') and response.status_code not in [200, 204, 404]:
             print(f"Warning: Container deletion returned status code {response.status_code}")
+            return False
+            
         return True
     except Exception as e:
         print(f"Error deleting container {instance_id}: {str(e)}")
-        traceback.print_exc()
         return False
 
 
@@ -584,86 +739,203 @@ class ContainerAPI(Resource):
     @authed_only
     # I wish this was Post... Issues with API/CSRF and whatnot. Open to a Issue solving this.
     def get(self):
-        container = request.args.get('name')
-        if not container:
-            return abort(403, "No container specified")
-        challenge = request.args.get('challenge')
-        if not challenge:
-            return abort(403, "No challenge name specified")
-        
-        docker = DockerConfig.query.filter_by(id=1).first()
-        containers = DockerChallengeTracker.query.all()
-        if container not in get_repositories(docker, tags=True):
-            return abort(403,f"Container {container} not present in the repository.")
-        if is_teams_mode():
-            session = get_current_team()
-            # First we'll delete all old docker containers (+2 hours)
-            for i in containers:
-                if i.team_id is not None and int(session.id) == int(i.team_id) and (unix_time(datetime.utcnow()) - int(i.timestamp)) >= 7200:
-                    delete_container(docker, i.instance_id)
-                    DockerChallengeTracker.query.filter_by(instance_id=i.instance_id).delete()
+        try:
+            container = request.args.get('name')
+            if not container:
+                return abort(403, "No container specified")
+            
+            # Basic input validation
+            if not isinstance(container, str) or len(container) > 256:
+                return abort(400, "Invalid container name")
+                
+            challenge = request.args.get('challenge')
+            if not challenge:
+                return abort(403, "No challenge name specified")
+                
+            # Basic input validation
+            if not isinstance(challenge, str) or len(challenge) > 256:
+                return abort(400, "Invalid challenge name")
+            
+            docker = DockerConfig.query.filter_by(id=1).first()
+            if not docker:
+                return abort(500, "Docker configuration not found")
+            
+            # Check if container exists in repository
+            try:
+                repositories = get_repositories(docker, tags=True)
+                if container not in repositories:
+                    return abort(403, f"Container {container} not present in the repository.")
+            except Exception as e:
+                print(f"Error getting repositories: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return abort(500, "Failed to get repository list")
+            
+            # Get current session
+            try:
+                if is_teams_mode():
+                    session = get_current_team()
+                else:
+                    session = get_current_user()
+                    
+                if not session:
+                    return abort(403, "No valid session")
+            except Exception as e:
+                print(f"Error getting session: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return abort(500, "Failed to get user session")
+            
+            containers = DockerChallengeTracker.query.all()
+            
+            # Clean up expired containers first (older than 2 hours)
+            try:
+                containers_to_remove = []
+                current_time = unix_time(datetime.utcnow())
+                
+                for i in containers:
+                    container_age = current_time - int(i.timestamp)
+                    if is_teams_mode():
+                        if i.team_id is not None and int(session.id) == int(i.team_id) and container_age >= 7200:
+                            try:
+                                delete_container(docker, i.instance_id)
+                                DockerChallengeTracker.query.filter_by(instance_id=i.instance_id).delete()
+                                db.session.commit()
+                            except Exception as e:
+                                print(f"Error removing old team container: {str(e)}")
+                    else:
+                        if i.user_id is not None and int(session.id) == int(i.user_id) and container_age >= 7200:
+                            try:
+                                delete_container(docker, i.instance_id)
+                                DockerChallengeTracker.query.filter_by(instance_id=i.instance_id).delete()
+                                db.session.commit()
+                            except Exception as e:
+                                print(f"Error removing old user container: {str(e)}")
+            except Exception as e:
+                print(f"Error during old container cleanup: {str(e)}")
+                import traceback
+                traceback.print_exc()
+            
+            # Check for existing container for this specific image
+            # Also implement a basic rate limiting (minimum 30 seconds between requests)
+            try:
+                if is_teams_mode():
+                    check = DockerChallengeTracker.query.filter_by(team_id=session.id).filter_by(docker_image=container).first()
+                else:
+                    check = DockerChallengeTracker.query.filter_by(user_id=session.id).filter_by(docker_image=container).first()
+                
+                # Check if user is making requests too frequently
+                if check and (unix_time(datetime.utcnow()) - int(check.timestamp)) < 30:
+                    return abort(429, "Rate limit exceeded. Please wait at least 30 seconds between requests.")
+                    
+            except Exception as e:
+                print(f"Error checking existing container: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                check = None
+            
+            # If this container is already created, we don't need another one.
+            if check != None and not (unix_time(datetime.utcnow()) - int(check.timestamp)) >= 300:
+                return abort(403,"To prevent abuse, dockers can be reverted and stopped after 5 minutes of creation.")
+            # Delete when requested
+            elif check != None and request.args.get('stopcontainer'):
+                try:
+                    delete_container(docker, check.instance_id)
+                    if is_teams_mode():
+                        DockerChallengeTracker.query.filter_by(team_id=session.id).filter_by(docker_image=container).delete()
+                    else:
+                        DockerChallengeTracker.query.filter_by(user_id=session.id).filter_by(docker_image=container).delete()
                     db.session.commit()
-            check = DockerChallengeTracker.query.filter_by(team_id=session.id).filter_by(docker_image=container).first()
-        else:
-            session = get_current_user()
-            for i in containers:
-                if i.user_id is not None and int(session.id) == int(i.user_id) and (unix_time(datetime.utcnow()) - int(i.timestamp)) >= 7200:
-                    delete_container(docker, i.instance_id)
-                    DockerChallengeTracker.query.filter_by(instance_id=i.instance_id).delete()
+                    return {"result": "Container stopped"}
+                except Exception as e:
+                    print(f"Error stopping container: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+                    return abort(500, "Failed to stop container")
+            # The exception would be if we are reverting a box. So we'll delete it if it exists and has been around for more than 5 minutes.
+            elif check != None:
+                try:
+                    delete_container(docker, check.instance_id)
+                    if is_teams_mode():
+                        DockerChallengeTracker.query.filter_by(team_id=session.id).filter_by(docker_image=container).delete()
+                    else:
+                        DockerChallengeTracker.query.filter_by(user_id=session.id).filter_by(docker_image=container).delete()
                     db.session.commit()
-            check = DockerChallengeTracker.query.filter_by(user_id=session.id).filter_by(docker_image=container).first()
-        
-        # If this container is already created, we don't need another one.
-        if check != None and not (unix_time(datetime.utcnow()) - int(check.timestamp)) >= 300:
-            return abort(403,"To prevent abuse, dockers can be reverted and stopped after 5 minutes of creation.")
-        # Delete when requested
-        elif check != None and request.args.get('stopcontainer'):
-            delete_container(docker, check.instance_id)
-            if is_teams_mode():
-                DockerChallengeTracker.query.filter_by(team_id=session.id).filter_by(docker_image=container).delete()
-            else:
-                DockerChallengeTracker.query.filter_by(user_id=session.id).filter_by(docker_image=container).delete()
-            db.session.commit()
-            return {"result": "Container stopped"}
-        # The exception would be if we are reverting a box. So we'll delete it if it exists and has been around for more than 5 minutes.
-        elif check != None:
-            delete_container(docker, check.instance_id)
-            if is_teams_mode():
-                DockerChallengeTracker.query.filter_by(team_id=session.id).filter_by(docker_image=container).delete()
-            else:
-                DockerChallengeTracker.query.filter_by(user_id=session.id).filter_by(docker_image=container).delete()
-            db.session.commit()
-        
-        # Check if a container is already running for this user. We need to recheck the DB first
-        containers = DockerChallengeTracker.query.all()
-        for i in containers:
-            if is_teams_mode():
-                # In teams mode, check team_id
-                if i.team_id is not None and int(session.id) == int(i.team_id):
-                    return abort(403,f"Another container is already running for challenge:<br><i><b>{i.challenge}</b></i>.<br>Please stop this first.<br>You can only run one container.")
-            else:
-                # In user mode, check user_id
-                if i.user_id is not None and int(session.id) == int(i.user_id):
-                    return abort(403,f"Another container is already running for challenge:<br><i><b>{i.challenge}</b></i>.<br>Please stop this first.<br>You can only run one container.")
+                except Exception as e:
+                    print(f"Error deleting existing container: {str(e)}")
+                    import traceback
+                    traceback.print_exc()
+            
+            # Check if a container is already running for this user. We need to recheck the DB first
+            # Also clean up any expired containers (older than 5 minutes)
+            containers = DockerChallengeTracker.query.all()
+            containers_to_remove = []
+            
+            for i in containers:
+                # Check if container has expired (older than 5 minutes = 300 seconds)
+                current_time = unix_time(datetime.utcnow())
+                container_age = current_time - int(i.timestamp)
+                
+                if container_age >= 300:
+                    try:
+                        delete_container(docker, i.instance_id)
+                        containers_to_remove.append(i)
+                    except Exception as e:
+                        print(f"Error deleting expired container {i.instance_id}: {str(e)}")
+                        # Only remove from DB if Docker deletion was successful
+                        continue
+                    continue
+                
+                # Check if user already has a running container (not expired)
+                if is_teams_mode():
+                    # In teams mode, check team_id
+                    if i.team_id is not None and int(session.id) == int(i.team_id):
+                        return {"message": f"Another container is already running for challenge:<br><i><b>{i.challenge}</b></i>.<br>Please stop this first.<br>You can only run one container."}, 403
+                else:
+                    # In user mode, check user_id
+                    if i.user_id is not None and int(session.id) == int(i.user_id):
+                        return {"message": f"Another container is already running for challenge:<br><i><b>{i.challenge}</b></i>.<br>Please stop this first.<br>You can only run one container."}, 403
+            
+            # Remove expired containers from database
+            for container_obj in containers_to_remove:
+                try:
+                    DockerChallengeTracker.query.filter_by(instance_id=container_obj.instance_id).delete()
+                    db.session.commit()
+                except Exception as e:
+                    print(f"Error removing expired container from DB: {str(e)}")
 
-        portsbl = get_unavailable_ports(docker)
-        create = create_container(docker, container, session.name, portsbl)
-        ports = json.loads(create[1])['HostConfig']['PortBindings'].values()
-        entry = DockerChallengeTracker(
-            team_id=session.id if is_teams_mode() else None,
-            user_id=session.id if not is_teams_mode() else None,
-            docker_image=container,
-            timestamp=unix_time(datetime.utcnow()),
-            revert_time=unix_time(datetime.utcnow()) + 300,
-            instance_id=create[0]['Id'],
-            ports=','.join([p[0]['HostPort'] for p in ports]),
-            host=str(docker.hostname).split(':')[0],
-            challenge=challenge
-        )
-        db.session.add(entry)
-        db.session.commit()
-        #db.session.close()
-        return
+            # Get ports and create container
+            try:
+                portsbl = get_unavailable_ports(docker)
+                
+                create = create_container(docker, container, session.name, portsbl)
+                
+                ports = json.loads(create[1])['HostConfig']['PortBindings'].values()
+                entry = DockerChallengeTracker(
+                    team_id=session.id if is_teams_mode() else None,
+                    user_id=session.id if not is_teams_mode() else None,
+                    docker_image=container,
+                    timestamp=unix_time(datetime.utcnow()),
+                    revert_time=unix_time(datetime.utcnow()) + 300,
+                    instance_id=create[0]['Id'],
+                    ports=','.join([p[0]['HostPort'] for p in ports]),
+                    host=str(docker.hostname).split(':')[0],
+                    challenge=challenge
+                )
+                db.session.add(entry)
+                db.session.commit()
+                return {"result": "Container created successfully"}
+            except Exception as e:
+                print(f"Error creating container: {str(e)}")
+                import traceback
+                traceback.print_exc()
+                return abort(500, f"Failed to create container: {str(e)}")
+        
+        except Exception as e:
+            print(f"ERROR in ContainerAPI.get(): {str(e)}")
+            import traceback
+            traceback.print_exc()
+            return abort(500, f"Internal server error: {str(e)}")
 
 
 active_docker_namespace = Namespace("docker", description='Endpoint to retrieve User Docker Image Status')
@@ -685,8 +957,52 @@ class DockerStatus(Resource):
         else:
             session = get_current_user()
             tracker = DockerChallengeTracker.query.filter_by(user_id=session.id)
+        
+        # First, clean up ALL expired containers globally (not just for current user)
+        all_containers = DockerChallengeTracker.query.all()
+        global_containers_to_remove = []
+        
+        for container in all_containers:
+            container_age = unix_time(datetime.utcnow()) - int(container.timestamp)
+            if container_age >= 300:  # 5 minutes
+                try:
+                    delete_container(docker, container.instance_id)
+                    global_containers_to_remove.append(container)
+                except Exception as e:
+                    print(f"Error deleting expired container {container.instance_id}: {str(e)}")
+                    # Still remove from DB even if Docker deletion fails
+                    global_containers_to_remove.append(container)
+        
+        # Remove expired containers from database
+        for container in global_containers_to_remove:
+            try:
+                DockerChallengeTracker.query.filter_by(instance_id=container.instance_id).delete()
+                db.session.commit()
+            except Exception as e:
+                print(f"Error removing expired container from DB: {str(e)}")
+                db.session.rollback()
+        
+        # Now get current user/team containers (after cleanup)
+        if is_teams_mode():
+            tracker = DockerChallengeTracker.query.filter_by(team_id=session.id)
+        else:
+            tracker = DockerChallengeTracker.query.filter_by(user_id=session.id)
+        # Now get the user's current containers (after cleanup)
         data = list()
+        containers_to_remove = []
+        
         for i in tracker:
+            # Check if container has expired (older than 5 minutes = 300 seconds)
+            if (unix_time(datetime.utcnow()) - int(i.timestamp)) >= 300:
+                try:
+                    delete_container(docker, i.instance_id)
+                    containers_to_remove.append(i)
+                except Exception as e:
+                    print(f"Error deleting expired container {i.instance_id}: {str(e)}")
+                    # Only remove from DB if Docker deletion was successful
+                    continue
+                continue
+                
             data.append({
                 'id': i.id,
                 'team_id': i.team_id,
@@ -698,6 +1014,15 @@ class DockerStatus(Resource):
                 'ports': i.ports.split(','),
                 'host': str(docker.hostname).split(':')[0]
             })
+        
+        # Remove expired containers from database
+        for container in containers_to_remove:
+            try:
+                DockerChallengeTracker.query.filter_by(instance_id=container.instance_id).delete()
+                db.session.commit()
+            except Exception as e:
+                print(f"Error removing expired container from DB: {str(e)}")
+        
         return {
             'success': True,
             'data': data
@@ -751,3 +1076,61 @@ def load(app):
     CTFd_API_v1.add_namespace(container_namespace, '/container')
     CTFd_API_v1.add_namespace(active_docker_namespace, '/docker_status')
     CTFd_API_v1.add_namespace(kill_container, '/nuke')
+    
+    # Start the background cleanup thread
+    start_cleanup_thread()
+    print("Docker challenges plugin loaded with background cleanup")
+
+
+# Global cleanup thread variable
+cleanup_thread = None
+
+def background_cleanup():
+    """
+    Background thread function that runs every 60 seconds to clean up expired containers
+    """
+    while True:
+        try:
+            time.sleep(60)  # Run every 60 seconds
+            
+            # Get all containers from database
+            containers = DockerChallengeTracker.query.all()
+            current_time = unix_time(datetime.utcnow())
+            
+            for container in containers:
+                container_age = current_time - container.timestamp
+                
+                # Check if container has expired (older than 5 minutes = 300 seconds)
+                if container_age >= 300:
+                    try:
+                        # Get docker configuration
+                        docker = DockerConfig.query.first()
+                        if docker:
+                            # Delete the container
+                            delete_container(docker, container.instance_id)
+                    except Exception as e:
+                        print(f"Background cleanup - Error deleting container {container.instance_id}: {str(e)}")
+                    
+                    try:
+                        # Remove from database
+                        db.session.delete(container)
+                        db.session.commit()
+                    except Exception as e:
+                        print(f"Background cleanup - Error removing container from database: {str(e)}")
+                        
+        except Exception as e:
+            print(f"Background cleanup - Error in cleanup thread: {str(e)}")
+            # Continue running even if there's an error
+
+def start_cleanup_thread():
+    """
+    Start the background cleanup thread if it's not already running
+    """
+    global cleanup_thread
+    
+    if cleanup_thread is None or not cleanup_thread.is_alive():
+        cleanup_thread = threading.Thread(target=background_cleanup, daemon=True)
+        cleanup_thread.start()
+        print("Background cleanup thread started")
+    else:
+        print("Background cleanup thread already running")

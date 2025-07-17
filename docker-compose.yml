@@ -14,7 +14,7 @@ services:
       - ACCESS_LOG=-
       - ERROR_LOG=-
       - REVERSE_PROXY=true
-      - DISCORD_WEBHOOK_URL=https://discord.com/api/webhooks/1390943182321225798/UDGjOP8bYaKSWxiJ3mLsHFd2FaWMVuqEAiEGJ94q-G5Urhs9KxA_6tgOlR9Omy0F1tol
+      - DISCORD_WEBHOOK_URL=
       - DISCORD_WEBHOOK_LIMIT=3
       - DISCORD_WEBHOOK_MESSAGE=Congratulations to {team} for the {fsolves} solve on challenge {challenge}!
     volumes:

@@ -2,6 +2,8 @@ CTFd._internal.challenge.data = undefined
 
 CTFd._internal.challenge.renderer = CTFd._internal.markdown;
 
+// Track status intervals for cleanup
+var statusIntervals = {};
 
 CTFd._internal.challenge.preRender = function() {}
 
@@ -15,6 +17,14 @@ CTFd._internal.challenge.postRender = function() {
     const containername = CTFd._internal.challenge.data.docker_image;
     get_docker_status(containername);
     createWarningModalBody();
+    
+    // Add periodic check every 30 seconds to ensure auto-kill is working
+    if (!window.autoKillCheck) {
+        window.autoKillCheck = setInterval(() => {
+            // Always check to ensure UI is up-to-date with backend auto-kill
+            get_docker_status(containername);
+        }, 30000); // Check every 30 seconds to catch auto-kills faster
+    }
 }
 
 function createWarningModalBody(){
@@ -25,11 +35,30 @@ function createWarningModalBody(){
 }
 
 function get_docker_status(container) {
+    // Don't fetch status if we're already actively running a timer for this container
+    if (statusIntervals[container]) {
+        return;
+    }
+    
     // Use CTFd.fetch to call the API
     CTFd.fetch("/api/v1/docker_status").then(response => response.json())
     .then(result => {
+        let containerFound = false;
+        
         result.data.forEach(item => {
             if (item.docker_image == container) {
+                containerFound = true;
+                
+                // Check if container has expired (5+ minutes old)
+                var currentTime = Math.floor(Date.now() / 1000);
+                var containerAge = currentTime - parseInt(item.timestamp);
+                
+                // Force reset if expired - be aggressive about cleanup
+                if (containerAge >= 300) {
+                    containerFound = false;
+                    return false; // Skip to next iteration
+                }
+                
                 // Split the ports and create the data string
                 var ports = String(item.ports).split(',');
                 
@@ -91,6 +120,12 @@ function get_docker_status(container) {
                 // Set up countdown timer
                 var countDownDate = new Date(parseInt(item.revert_time) * 1000).getTime();
                 
+                // Clear any existing interval for this container
+                if (statusIntervals[item.docker_image]) {
+                    clearInterval(statusIntervals[item.docker_image]);
+                    delete statusIntervals[item.docker_image];
+                }
+                
                 var x = setInterval(function() {
                     var now = new Date().getTime();
                     var distance = countDownDate - now;
@@ -99,53 +134,107 @@ function get_docker_status(container) {
                     if (seconds < 10) seconds = "0" + seconds;
                     
                     const timerElement = CTFd.lib.$("#" + String(item.instance_id).substring(0, 10) + "_revert_container");
+                    
+                    // Check if timer element still exists
+                    if (timerElement.length === 0) {
+                        clearInterval(x);
+                        delete statusIntervals[item.docker_image];
+                        return;
+                    }
+
+                    // Every 20 seconds, verify the container is still running
+                    if (now % 20000 < 1000) {
+                        CTFd.fetch("/api/v1/docker_status").then(response => response.json())
+                        .then(result => {
+                            let stillRunning = false;
+                            result.data.forEach(statusItem => {
+                                if (statusItem.docker_image === item.docker_image && statusItem.instance_id === item.instance_id) {
+                                    stillRunning = true;
+                                }
+                            });
+                            
+                            if (!stillRunning) {
+                                clearInterval(x);
+                                delete statusIntervals[item.docker_image];
+                                resetToNormalState(item.docker_image);
+                                return;
+                            }
+                        })
+                        .catch(error => {
+                            // Silent error handling - continue with timer
+                        });
+                    }
 
                     if (distance > 0) {
                         // Update countdown
                         timerElement.html(`
                             <div class="timer-context" style="font-size: 13px; color: #d1d5db; margin-bottom: 6px;">
-                                Container expires in:
+                                Container will auto-stop in:
                             </div>
                             <div class="docker-timer" style="font-size: 18px; font-weight: 700; color: #ffffff;">
                                 ${minutes}:${seconds}
                             </div>
                         `);
                     } else {
-                        // Time expired, show Revert/Stop buttons
+                        // Time expired, show revert/stop buttons
                         clearInterval(x);
-                        timerElement.html(`
-                            <div class="docker-actions" style="margin-top: 10px; display: flex; justify-content: center; gap: 8px;">
-                                <button onclick="start_container('${item.docker_image}');" style="
-                                    background: linear-gradient(135deg, #1e40af 0%, #1d4ed8 100%);
-                                    border: none; border-radius: 4px; color: #ffffff;
-                                    padding: 8px 16px; font-size: 13px; font-weight: 500;
-                                    cursor: pointer; transition: all 0.2s ease;">
-                                    <i class="fas fa-redo" style="margin-right: 5px;"></i> Revert
-                                </button>
-                                <button onclick="stop_container('${item.docker_image}');" style="
-                                    background: linear-gradient(135deg, #dc2626 0%, #b91c1c 100%);
-                                    border: none; border-radius: 4px; color: #ffffff;
-                                    padding: 8px 16px; font-size: 13px; font-weight: 500;
-                                    cursor: pointer; transition: all 0.2s ease;">
-                                    <i class="fas fa-stop" style="margin-right: 5px;"></i> Stop
-                                </button>
+                        delete statusIntervals[item.docker_image];
+                        
+                        const dockerContainer = CTFd.lib.$('#docker_container');
+                        const expiredHTML = `
+                            <div class="docker-control-panel" style="background: #1f2937; border-radius: 6px; padding: 15px; box-shadow: 0 2px 4px rgba(0,0,0,0.2); text-align: center;">
+                                <div class="docker-content">
+                                    <div class="timer-section" style="display: flex; justify-content: center; align-items: center; width: 100%;">
+                                        <div class="docker-actions" style="display: flex; justify-content: center; align-items: center; width: 100%;">
+                                            <div class="action-buttons" style="display: flex; gap: 15px; justify-content: center; align-items: center;">
+                                                <button onclick="start_container('${item.docker_image}');" style="
+                                                    background: #1e40af;
+                                                    border: none; border-radius: 4px; color: #ffffff;
+                                                    padding: 10px 18px; font-size: 13px; font-weight: 500;
+                                                    cursor: pointer; min-width: 90px; text-align: center;
+                                                    display: flex; align-items: center; justify-content: center;">
+                                                    <i class="fas fa-redo" style="margin-right: 5px;"></i> Revert
+                                                </button>
+                                                <button onclick="stop_container('${item.docker_image}');" style="
+                                                    background: #dc2626;
+                                                    border: none; border-radius: 4px; color: #ffffff;
+                                                    padding: 10px 18px; font-size: 13px; font-weight: 500;
+                                                    cursor: pointer; min-width: 90px; text-align: center;
+                                                    display: flex; align-items: center; justify-content: center;">
+                                                    <i class="fas fa-stop" style="margin-right: 5px;"></i> Stop
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             </div>
-                        `);
+                        `;
+                        
+                        dockerContainer.html(expiredHTML);
+                        
+                        // After 30 seconds of showing revert/stop buttons, auto-reset to launch
+                        setTimeout(() => {
+                            resetToNormalState(item.docker_image);
+                        }, 30000);
                     }
                 }, 1000);
+                
+                // Track the interval for cleanup
+                statusIntervals[item.docker_image] = x;
 
                 return false; // Stop once the correct container is found
             }
         });
+        
+        // If no active container found, show launch button
+        if (!containerFound) {
+            resetToNormalState(container);
+        }
     })
     .catch(error => {
-        console.error('Error fetching docker status:', error);
+        // On error, show the launch button
+        resetToNormalState(container);
     });
-
-    // Show the normal start button again in fallback
-    const dockerContainer = CTFd.lib.$('#docker_container');
-    dockerContainer.find('.docker-launch-btn').show();
-    dockerContainer.find('.status-indicator').text('Ready to launch container');
 }
 
 
@@ -205,30 +294,107 @@ function start_container(container) {
     CTFd.fetch("/api/v1/container?name=" + encodeURIComponent(container) + "&challenge=" + encodeURIComponent(CTFd._internal.challenge.data.name), {
         method: "GET"
     }).then(function (response) {
-        return response.json().then(function (json) {
-            if (response.ok) {
+        if (response.ok) {
+            return response.json().then(function (json) {
                 get_docker_status(container);
-    
+                
                 updateWarningModal({
                     title: "Instance Deployed",
                     warningText: "Your challenge container is active.<br><small>Restart or stop actions are limited to once every 5 minutes.</small>",
                     buttonText: "Close"
                 });
-            } else {
-                throw new Error(json.message || 'Failed to start container');
-            }
-        });
+            });
+        } else {
+            // Handle error responses (like 403 for already running containers)
+            return response.text().then(function (text) {
+                // Try to parse as JSON first, fall back to text
+                let errorMessage;
+                try {
+                    const json = JSON.parse(text);
+                    errorMessage = json.message || text;
+                } catch (e) {
+                    errorMessage = text;
+                }
+                
+                updateWarningModal({
+                    title: "Deployment Failed",
+                    warningText: errorMessage || "An error occurred while starting the container.",
+                    buttonText: "Close",
+                    onClose: function () {
+                        // Reset UI to normal state after modal is closed
+                        resetToNormalState(container);
+                    }
+                });
+            });
+        }
     }).catch(function (error) {
         updateWarningModal({
             title: "Deployment Failed",
             warningText: error.message || "An error occurred while starting the container.",
             buttonText: "Close",
             onClose: function () {
-                get_docker_status(container);
+                // Reset UI to normal state after modal is closed
+                resetToNormalState(container);
             }
         });
     });
 }
+
+function resetToNormalState(container) {
+    // Clear any existing timers
+    if (statusIntervals[container]) {
+        clearInterval(statusIntervals[container]);
+        delete statusIntervals[container];
+    }
+    
+    // Reset the UI to show the normal launch button
+    const dockerContainer = CTFd.lib.$('#docker_container');
+    const originalHTML = `
+        <div class="description">Spin up your challenge container.</div>
+        <div class="docker-control-panel">
+            <div class="docker-launch-section">
+                <button onclick="start_container('${container}');" class="docker-launch-btn">
+                    Launch Instance
+                </button>
+            </div>
+        </div>
+    `;
+    dockerContainer.html(originalHTML);
+}
+
+// Clean up all timers when the page/challenge is closed
+window.addEventListener('beforeunload', function() {
+    for (let container in statusIntervals) {
+        if (statusIntervals[container]) {
+            clearInterval(statusIntervals[container]);
+            delete statusIntervals[container];
+        }
+    }
+    if (window.autoKillCheck) {
+        clearInterval(window.autoKillCheck);
+        window.autoKillCheck = null;
+    }
+});
+
+// Also clean up when navigating away from challenge (only clear auto-kill check, keep timers running)
+document.addEventListener('visibilitychange', function() {
+    if (document.hidden) {
+        // Only clear the periodic auto-kill check to save resources
+        // Keep container timers running even when tab is hidden
+        if (window.autoKillCheck) {
+            clearInterval(window.autoKillCheck);
+            window.autoKillCheck = null;
+        }
+    } else {
+        // When tab becomes visible again, restart the auto-kill check
+        const containername = CTFd._internal.challenge.data.docker_image;
+        if (containername && !window.autoKillCheck) {
+            window.autoKillCheck = setInterval(() => {
+                get_docker_status(containername);
+            }, 30000);
+        }
+    }
+});
 
 
 function updateWarningModal({

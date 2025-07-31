@@ -1,0 +1,451 @@
+{% extends 'admin/base.html' %}
+
+{% block content %}
+<style>
+.docker-form-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 3rem 0;
+    margin-bottom: 2rem;
+}
+
+.form-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+    overflow: hidden;
+    margin-bottom: 2rem;
+}
+
+.form-card-header {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e9ecef;
+}
+
+.form-card-body {
+    padding: 2rem;
+}
+
+.form-group {
+    margin-bottom: 1.5rem;
+}
+
+.form-label {
+    font-weight: 600;
+    color: #495057;
+    margin-bottom: 0.5rem;
+    display: block;
+}
+
+.form-control-elegant {
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    padding: 0.75rem 1rem;
+    transition: all 0.3s ease;
+    font-size: 0.95rem;
+}
+
+.form-control-elegant:focus {
+    border-color: #667eea;
+    box-shadow: 0 0 0 0.2rem rgba(102, 126, 234, 0.1);
+}
+
+.form-text-elegant {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+.btn-elegant {
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.btn-primary-elegant {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+}
+
+.btn-primary-elegant:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    color: white;
+}
+
+.btn-secondary-elegant {
+    background: white;
+    border: 2px solid #e9ecef;
+    color: #495057;
+}
+
+.btn-secondary-elegant:hover {
+    background: #f8f9fa;
+    border-color: #adb5bd;
+    color: #495057;
+}
+
+.radio-group {
+    display: flex;
+    gap: 1rem;
+    margin-top: 0.5rem;
+}
+
+.radio-option {
+    display: flex;
+    align-items: center;
+    padding: 0.75rem 1rem;
+    border: 2px solid #e9ecef;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    flex: 1;
+}
+
+.radio-option:hover {
+    border-color: #667eea;
+    background: #f8f9ff;
+}
+
+.radio-option input[type="radio"] {
+    margin-right: 0.5rem;
+}
+
+.radio-option.selected {
+    border-color: #667eea;
+    background: #f8f9ff;
+}
+
+.file-upload-area {
+    border: 2px dashed #e9ecef;
+    border-radius: 8px;
+    padding: 1.5rem;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+}
+
+.file-upload-area:hover {
+    border-color: #667eea;
+    background: #f8f9ff;
+}
+
+.file-upload-area.has-file {
+    border-color: #28a745;
+    background: #f8fff9;
+}
+
+.security-section {
+    background: #f8f9fa;
+    border-radius: 8px;
+    padding: 1.5rem;
+    margin-bottom: 1.5rem;
+}
+
+.security-section h6 {
+    color: #495057;
+    margin-bottom: 1rem;
+    font-weight: 600;
+}
+
+.cert-status {
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    font-size: 0.75rem;
+    font-weight: 600;
+}
+
+.cert-status.uploaded {
+    background: #d4edda;
+    color: #155724;
+}
+</style>
+
+<div class="docker-form-header">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h1 class="mb-2">{{ action }} Docker Server</h1>
+                <p class="mb-0 opacity-75">Configure secure connection to your Docker infrastructure</p>
+            </div>
+            <div class="col-md-4 text-md-right">
+                <a href="{{ url_for('admin_docker_config.docker_config_list') }}" class="btn btn-light">
+                    <i class="fas fa-arrow-left me-2"></i> Back to Servers
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <div class="row justify-content-center">
+        <div class="col-lg-8">
+            {% for error in errors %}
+            <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                {{ error }}
+                <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+            </div>
+            {% endfor %}
+            
+            {% if form.errors %}
+                {% for field, errors in form.errors.items() %}
+                    {% for error in errors %}
+                    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+                        <strong>{{ field|title }}:</strong> {{ error }}
+                        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+                    </div>
+                    {% endfor %}
+                {% endfor %}
+            {% endif %}
+            
+            <form method="post" accept-charset="utf-8" autocomplete="off" enctype="multipart/form-data">
+                {{ form.hidden_tag() }}
+                
+                <!-- Basic Configuration -->
+                <div class="form-card">
+                    <div class="form-card-header">
+                        <h5 class="mb-0">Basic Configuration</h5>
+                    </div>
+                    <div class="form-card-body">
+                        <div class="form-group">
+                            <label class="form-label" for="name-input">
+                                Server Name <span class="text-danger">*</span>
+                            </label>
+                            <input class="form-control form-control-elegant" type="text" name="name" id="name-input" 
+                                   placeholder="e.g., Main Server, PWN Challenges" value="{{ form.name.data or '' }}" required />
+                            <div class="form-text-elegant">A friendly name to identify this Docker server</div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="hostname-input">
+                                Docker Hostname <span class="text-danger">*</span>
+                            </label>
+                            <input class="form-control form-control-elegant" type="text" name="hostname" id="hostname-input" 
+                                   placeholder="10.10.10.10:2376" value="{{ form.hostname.data or '' }}" required />
+                            <div class="form-text-elegant">The IP address and port of your Docker daemon</div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <label class="form-label" for="domain-input">
+                                Public Domain (Optional)
+                            </label>
+                            <input class="form-control form-control-elegant" type="text" name="domain" id="domain-input" 
+                                   placeholder="pwn.example.com" value="{{ form.domain.data or '' }}" />
+                            <div class="form-text-elegant">Domain name shown to users instead of IP address</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Security Configuration -->
+                <div class="form-card">
+                    <div class="form-card-header">
+                        <h5 class="mb-0">Security Configuration</h5>
+                    </div>
+                    <div class="form-card-body">
+                        <div class="form-group">
+                            <label class="form-label">TLS Security</label>
+                            <div class="radio-group">
+                                <div class="radio-option" onclick="selectTLS(false)">
+                                    <input type="radio" name="tls_enabled" id="tls-radiobox-no" value="False" 
+                                           {% if not form.tls_enabled.data or form.tls_enabled.data == 'False' %}checked{% endif %} />
+                                    <div>
+                                        <strong>Disabled</strong>
+                                        <br><small class="text-muted">Unencrypted connection</small>
+                                    </div>
+                                </div>
+                                <div class="radio-option" onclick="selectTLS(true)">
+                                    <input type="radio" name="tls_enabled" id="tls-radiobox-yes" value="True" 
+                                           {% if form.tls_enabled.data == 'True' %}checked{% endif %} />
+                                    <div>
+                                        <strong>Enabled</strong>
+                                        <br><small class="text-muted">Secure encrypted connection</small>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div id="tls-certificates" style="display: {% if form.tls_enabled.data == 'True' %}block{% else %}none{% endif %};">
+                            <div class="security-section">
+                                <h6><i class="fas fa-certificate me-2"></i>TLS Certificates</h6>
+                                
+                                <div class="row">
+                                    <div class="col-md-4">
+                                        <label class="form-label">CA Certificate
+                                            {% if server and server.ca_cert %}
+                                                <span class="cert-status uploaded">Uploaded</span>
+                                            {% endif %}
+                                        </label>
+                                        <div class="file-upload-area" onclick="document.getElementById('ca_cert').click();">
+                                            <i class="fas fa-upload mb-2 text-muted"></i>
+                                            <div class="small">Click to upload CA cert</div>
+                                            <input type="file" name="ca_cert" id="ca_cert" accept=".pem,.crt" style="display: none;" 
+                                                   {% if form.tls_enabled.data == "True" and action == "Add" %}required{% endif %} />
+                                        </div>
+                                        {% if server and server.ca_cert %}
+                                            <div class="form-text-elegant">Adding a new file will overwrite the existing certificate</div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Client Certificate
+                                            {% if server and server.client_cert %}
+                                                <span class="cert-status uploaded">Uploaded</span>
+                                            {% endif %}
+                                        </label>
+                                        <div class="file-upload-area" onclick="document.getElementById('client_cert').click();">
+                                            <i class="fas fa-upload mb-2 text-muted"></i>
+                                            <div class="small">Click to upload client cert</div>
+                                            <input type="file" name="client_cert" id="client_cert" accept=".pem,.crt" style="display: none;" 
+                                                   {% if form.tls_enabled.data == "True" and action == "Add" %}required{% endif %} />
+                                        </div>
+                                        {% if server and server.client_cert %}
+                                            <div class="form-text-elegant">Adding a new file will overwrite the existing certificate</div>
+                                        {% endif %}
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label">Client Key
+                                            {% if server and server.client_key %}
+                                                <span class="cert-status uploaded">Uploaded</span>
+                                            {% endif %}
+                                        </label>
+                                        <div class="file-upload-area" onclick="document.getElementById('client_key').click();">
+                                            <i class="fas fa-upload mb-2 text-muted"></i>
+                                            <div class="small">Click to upload client key</div>
+                                            <input type="file" name="client_key" id="client_key" accept=".pem,.key" style="display: none;" 
+                                                   {% if form.tls_enabled.data == "True" and action == "Add" %}required{% endif %} />
+                                        </div>
+                                        {% if server and server.client_key %}
+                                            <div class="form-text-elegant">Adding a new file will overwrite the existing key</div>
+                                        {% endif %}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                
+                <!-- Repository Selection -->
+                <div class="form-card">
+                    <div class="form-card-header">
+                        <h5 class="mb-0">Repository Selection</h5>
+                    </div>
+                    <div class="form-card-body">
+                        <div class="form-group">
+                            <label class="form-label" for="repositories">
+                                Available Repositories
+                            </label>
+                            <select id='repositories' name="repositories" class='form-control form-control-elegant' size='8' multiple>
+                                {% if form.repositories.choices and form.repositories.choices[0][0] == "ERROR" %}
+                                    <option value='False' disabled>{{ form.repositories.choices[0][1] }}</option>
+                                {% elif form.repositories.choices %}
+                                    {% for key, value in form.repositories.choices %}
+                                        <option value='{{ key }}' 
+                                            {% if form.repositories.data and key in form.repositories.data %}selected{% endif %}>
+                                            {{ value }}
+                                        </option>
+                                    {% endfor %}
+                                {% else %}
+                                    <option value='False' disabled>Connect to Docker API first to see available images</option>
+                                {% endif %}
+                            </select>
+                            <div class="form-text-elegant">Hold Ctrl/Cmd to select multiple repositories</div>
+                        </div>
+                        
+                        <div class="form-group">
+                            <div class="form-check d-flex align-items-center">
+                                <input type="checkbox" class="form-check-input me-3" name="is_active" id="is_active" 
+                                       {% if form.is_active.data %}checked{% endif %} />
+                                <label class="form-check-label form-label" for="is_active">
+                                    Server Active
+                                </label>
+                            </div>
+                            <div class="form-text-elegant">Uncheck to temporarily disable this server</div>
+                        </div>
+                    </div>
+                </div>
+                
+                <div class="text-center">
+                    <a href="{{ url_for('admin_docker_config.docker_config_list') }}" class="btn btn-secondary-elegant me-3">
+                        <i class="fas fa-arrow-left me-2"></i> Back to List
+                    </a>
+                    <button type="submit" class="btn btn-primary-elegant">
+                        <i class="fas fa-save me-2"></i> {{ action }} Server
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+{% endblock content %}
+
+{% block scripts %}
+<script>
+function selectTLS(enabled) {
+    const tlsCerts = document.getElementById('tls-certificates');
+    const radioNo = document.getElementById('tls-radiobox-no');
+    const radioYes = document.getElementById('tls-radiobox-yes');
+    const caFile = document.getElementById('ca_cert');
+    const clientFile = document.getElementById('client_cert');
+    const keyFile = document.getElementById('client_key');
+    
+    if (enabled) {
+        radioYes.checked = true;
+        tlsCerts.style.display = 'block';
+        
+        // Set required for new servers
+        if ("{{ action }}" === "Add") {
+            caFile.required = true;
+            clientFile.required = true;
+            keyFile.required = true;
+        }
+    } else {
+        radioNo.checked = true;
+        tlsCerts.style.display = 'none';
+        
+        // Remove required
+        caFile.required = false;
+        clientFile.required = false;
+        keyFile.required = false;
+    }
+    
+    // Update radio option styling
+    document.querySelectorAll('.radio-option').forEach(option => {
+        option.classList.remove('selected');
+    });
+    
+    if (enabled) {
+        document.querySelector('.radio-option:nth-child(2)').classList.add('selected');
+    } else {
+        document.querySelector('.radio-option:nth-child(1)').classList.add('selected');
+    }
+}
+
+// Handle file upload areas
+document.addEventListener('DOMContentLoaded', function() {
+    // Set initial TLS state
+    const tlsEnabled = document.querySelector('input[name="tls_enabled"]:checked').value === "True";
+    selectTLS(tlsEnabled);
+    
+    // File upload handlers
+    ['ca_cert', 'client_cert', 'client_key'].forEach(id => {
+        const input = document.getElementById(id);
+        const area = input.parentElement;
+        
+        input.addEventListener('change', function() {
+            if (this.files.length > 0) {
+                area.classList.add('has-file');
+                area.querySelector('.small').textContent = this.files[0].name;
+            } else {
+                area.classList.remove('has-file');
+                area.querySelector('.small').textContent = 'Click to upload ' + 
+                    (id.includes('ca') ? 'CA cert' : 
+                     id.includes('client_cert') ? 'client cert' : 'client key');
+            }
+        });
+    });
+});
+</script>
+{% endblock scripts %}

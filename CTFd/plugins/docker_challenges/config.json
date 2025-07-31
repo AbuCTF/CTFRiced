@@ -1,6 +1,6 @@
 [
 	{
-	    "name": "Docker Config",
+	    "name": "Docker Servers",
 	    "route": "/admin/docker_config"
 	},
 	{

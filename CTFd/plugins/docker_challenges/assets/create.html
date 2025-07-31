@@ -11,9 +11,15 @@
 </div>
 <div class="form-group">
     <label for="DockerImage" id='dockerimage_label'>Docker Image:
-        <i class="far fa-question-circle text-muted cursor-help" data-toggle="tooltip" data-placement="right" title="The docker image for your challenge"></i>
+        <i class="far fa-question-circle text-muted cursor-help" data-toggle="tooltip" data-placement="right" 
+           title="Select the Docker server and image for your challenge. Images are grouped by server."></i>
     </label>
-    <select id="dockerimage_select" name="docker_image" class="form-control" required></select>
+    <select id="dockerimage_select" name="docker_image" class="form-control" required>
+        <option value="" disabled selected>Loading servers and images...</option>
+    </select>
+    <small class="form-text text-muted">
+        Images are grouped by Docker server. Format: Server Name | Image Name
+    </small>
 </div>
 {% endblock %}
 {% block type %}

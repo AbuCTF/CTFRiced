@@ -1,0 +1,426 @@
+{% extends 'admin/base.html' %}
+
+{% block content %}
+<style>
+.docker-admin-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 3rem 0;
+    margin-bottom: 2rem;
+}
+
+.docker-card {
+    border: none;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+    border-radius: 12px;
+    transition: all 0.3s ease;
+}
+
+.docker-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.12);
+}
+
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 8px;
+}
+
+.status-online { background-color: #28a745; }
+.status-error { background-color: #dc3545; }
+.status-warning { background-color: #ffc107; }
+
+.server-table {
+    background: white;
+    border-radius: 12px;
+    overflow: hidden;
+    box-shadow: 0 2px 10px rgba(0,0,0,0.08);
+}
+
+.server-table thead {
+    background: #f8f9fa;
+    border-bottom: 2px solid #e9ecef;
+}
+
+.server-table th {
+    font-weight: 600;
+    color: #495057;
+    border: none;
+    padding: 1.2rem 1rem;
+}
+
+.server-table td {
+    border: none;
+    padding: 1rem;
+    vertical-align: middle;
+}
+
+.btn-minimal {
+    border: 1px solid #dee2e6;
+    background: white;
+    color: #495057;
+    transition: all 0.2s ease;
+    border-radius: 6px;
+    font-size: 0.875rem;
+}
+
+.btn-minimal:hover {
+    background: #f8f9fa;
+    border-color: #adb5bd;
+    color: #495057;
+}
+
+.btn-minimal.btn-primary:hover {
+    background: #0056b3;
+    border-color: #0056b3;
+    color: white;
+}
+
+.badge-elegant {
+    padding: 0.4rem 0.8rem;
+    border-radius: 20px;
+    font-weight: 500;
+    font-size: 0.75rem;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 4rem 2rem;
+    color: #6c757d;
+}
+
+.empty-state-icon {
+    font-size: 4rem;
+    color: #dee2e6;
+    margin-bottom: 1rem;
+}
+</style>
+
+<div class="docker-admin-header">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h1 class="mb-2">Docker Servers</h1>
+                <p class="mb-0 opacity-75">Manage and monitor your Docker infrastructure</p>
+            </div>
+            <div class="col-md-4 text-md-right">
+                <a href="{{ url_for('admin_docker_config.docker_config_add') }}" class="btn btn-light btn-lg">
+                    <i class="fas fa-plus me-2"></i> Add Server
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    {% for error in errors %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+    
+    {% if servers %}
+    <div class="server-table">
+        <table class="table table-hover mb-0">
+            <thead>
+                <tr>
+                    <th>Server</th>
+                    <th>Connection</th>
+                    <th>Status</th>
+                    <th>Configuration</th>
+                    <th class="text-end">Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for server in servers %}
+                <tr id="server-{{ server.id }}">
+                    <td>
+                        <div class="d-flex align-items-center">
+                            <div class="status-indicator 
+                                {% if server.status == 'online' %}status-online
+                                {% elif server.status == 'error' %}status-error
+                                {% else %}status-warning{% endif %}"></div>
+                            <div>
+                                <div class="fw-bold">{{ server.name }}</div>
+                                <small class="text-muted">
+                                    {% if server.last_status_check %}
+                                        Last checked {{ server.last_status_check.strftime('%H:%M') }}
+                                    {% else %}
+                                        Never checked
+                                    {% endif %}
+                                </small>
+                            </div>
+                        </div>
+                    </td>
+                    <td>
+                        <div class="mb-1">
+                            <code class="text-muted">{{ server.hostname }}</code>
+                        </div>
+                        {% if server.domain %}
+                            <div class="badge badge-elegant bg-primary text-white">{{ server.domain }}</div>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="mb-1">
+                            <span class="badge badge-elegant 
+                                {% if server.status == 'online' %}bg-success text-white
+                                {% elif server.status == 'error' %}bg-danger text-white
+                                {% else %}bg-warning text-dark{% endif %}">
+                                {{ server.status|title }}
+                            </span>
+                        </div>
+                        {% if server.status_message and server.status != 'online' %}
+                            <small class="text-muted">{{ server.status_message[:50] }}{% if server.status_message|length > 50 %}...{% endif %}</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <div class="d-flex gap-2">
+                            {% if server.tls_enabled %}
+                                <span class="badge badge-elegant bg-success text-white">TLS</span>
+                            {% endif %}
+                            {% if server.is_active %}
+                                <span class="badge badge-elegant bg-info text-white">Active</span>
+                            {% else %}
+                                <span class="badge badge-elegant bg-secondary text-white">Inactive</span>
+                            {% endif %}
+                        </div>
+                    </td>
+                    <td class="text-end">
+                        <div class="btn-group" role="group">
+                            <button type="button" class="btn btn-minimal btn-sm" 
+                                    onclick="testServer({{ server.id }})" id="test-btn-{{ server.id }}">
+                                <i class="fas fa-heartbeat"></i>
+                            </button>
+                            <a href="{{ url_for('admin_docker_config.docker_config_edit', server_id=server.id) }}" 
+                               class="btn btn-minimal btn-sm">
+                                <i class="fas fa-edit"></i>
+                            </a>
+                            <button type="button" class="btn btn-minimal btn-sm text-danger" 
+                                    onclick="deleteServer({{ server.id }}, '{{ server.name }}')">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </div>
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="empty-state">
+        <div class="empty-state-icon">
+            <i class="fas fa-server"></i>
+        </div>
+        <h4>No Docker Servers Configured</h4>
+        <p class="mb-4">Get started by adding your first Docker server to enable container-based challenges.</p>
+        <a href="{{ url_for('admin_docker_config.docker_config_add') }}" class="btn btn-primary btn-lg">
+            <i class="fas fa-plus me-2"></i> Add Your First Server
+        </a>
+    </div>
+    {% endif %}
+</div>
+{% endblock content %}
+
+{% block scripts %}
+<script>
+function testServer(serverId) {
+    const button = document.getElementById('test-btn-' + serverId);
+    const serverRow = document.getElementById('server-' + serverId);
+    const statusIndicator = serverRow.querySelector('.status-indicator');
+    const statusBadge = serverRow.querySelector('.badge');
+    const statusMessage = serverRow.querySelector('small.text-muted');
+    
+    // Show loading state
+    button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+    button.disabled = true;
+    button.classList.add('btn-primary');
+    
+    // Update visual indicators to loading state
+    statusIndicator.className = 'status-indicator status-warning';
+    statusBadge.className = 'badge badge-elegant bg-warning text-dark';
+    statusBadge.textContent = 'Testing...';
+    
+    fetch('/admin/docker_config/test/' + serverId, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        // Reset button
+        button.innerHTML = '<i class="fas fa-heartbeat"></i>';
+        button.disabled = false;
+        button.classList.remove('btn-primary');
+        
+        // Update status indicators based on result
+        if (data.success) {
+            statusIndicator.className = 'status-indicator status-online';
+            statusBadge.className = 'badge badge-elegant bg-success text-white';
+            statusBadge.textContent = 'Online';
+            
+            // Update or remove status message
+            if (statusMessage) {
+                if (data.message === 'Online') {
+                    statusMessage.style.display = 'none';
+                } else {
+                    statusMessage.textContent = data.message;
+                    statusMessage.style.display = 'block';
+                }
+            }
+        } else {
+            statusIndicator.className = 'status-indicator status-error';
+            statusBadge.className = 'badge badge-elegant bg-danger text-white';
+            statusBadge.textContent = 'Error';
+            
+            // Show error message
+            if (statusMessage) {
+                statusMessage.textContent = data.message.length > 50 ? data.message.substring(0, 50) + '...' : data.message;
+                statusMessage.style.display = 'block';
+            }
+        }
+        
+        // Show elegant toast notification
+        showToast(
+            data.success ? 'success' : 'error',
+            data.success ? 'Connection Test Successful' : 'Connection Test Failed',
+            data.message,
+            data.success ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle'
+        );
+        
+        // Update last checked time
+        const lastChecked = serverRow.querySelector('small.text-muted:first-child');
+        if (lastChecked && lastChecked.textContent.includes('Last checked')) {
+            const now = new Date();
+            const timeString = now.toLocaleTimeString('en-US', { hour12: false, hour: '2-digit', minute: '2-digit' });
+            lastChecked.textContent = `Last checked ${timeString}`;
+        }
+    })
+    .catch(error => {
+        button.innerHTML = '<i class="fas fa-heartbeat"></i>';
+        button.disabled = false;
+        button.classList.remove('btn-primary');
+        
+        // Update to error state
+        statusIndicator.className = 'status-indicator status-error';
+        statusBadge.className = 'badge badge-elegant bg-danger text-white';
+        statusBadge.textContent = 'Error';
+        
+        showToast('error', 'Connection Test Failed', 'Network error: ' + error.message, 'fas fa-exclamation-triangle');
+    });
+}
+
+function showToast(type, title, message, icon) {
+    const toastId = 'toast-' + Date.now();
+    const isSuccess = type === 'success';
+    const iconClass = icon || (isSuccess ? 'fas fa-check-circle' : 'fas fa-exclamation-triangle');
+    
+    // Create a clean, minimal toast
+    const toast = `
+        <div id="${toastId}" class="toast-notification ${isSuccess ? 'toast-success' : 'toast-error'}" style="
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 9999;
+            min-width: 300px;
+            max-width: 400px;
+            background: ${isSuccess ? '#28a745' : '#dc3545'};
+            color: white;
+            border-radius: 8px;
+            box-shadow: 0 4px 16px rgba(0,0,0,0.2);
+            padding: 16px 20px;
+            margin-bottom: 10px;
+            opacity: 0;
+            transform: translateX(100%);
+            transition: all 0.3s ease;
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        ">
+            <div style="display: flex; align-items: flex-start; gap: 12px;">
+                <div style="margin-top: 2px;">
+                    <i class="${iconClass}" style="font-size: 18px;"></i>
+                </div>
+                <div style="flex: 1; min-width: 0;">
+                    <div style="font-weight: 600; font-size: 14px; margin-bottom: 4px;">${title}</div>
+                    <div style="font-size: 13px; opacity: 0.9; line-height: 1.4;">${message}</div>
+                </div>
+                <button onclick="document.getElementById('${toastId}').remove()" style="
+                    background: none;
+                    border: none;
+                    color: white;
+                    font-size: 18px;
+                    cursor: pointer;
+                    padding: 0;
+                    margin-left: 8px;
+                    opacity: 0.7;
+                    transition: opacity 0.2s ease;
+                " onmouseover="this.style.opacity='1'" onmouseout="this.style.opacity='0.7'">×</button>
+            </div>
+        </div>
+    `;
+    
+    // Add to page
+    document.body.insertAdjacentHTML('beforeend', toast);
+    
+    // Animate in
+    const toastElement = document.getElementById(toastId);
+    setTimeout(() => {
+        toastElement.style.opacity = '1';
+        toastElement.style.transform = 'translateX(0)';
+    }, 10);
+    
+    // Auto dismiss after 5 seconds
+    setTimeout(() => {
+        if (toastElement) {
+            toastElement.style.opacity = '0';
+            toastElement.style.transform = 'translateX(100%)';
+            setTimeout(() => toastElement.remove(), 300);
+        }
+    }, 5000);
+}
+
+function deleteServer(serverId, serverName) {
+    if (!confirm(`Are you sure you want to delete server "${serverName}"?\n\nThis action cannot be undone. Make sure no challenges are using this server.`)) {
+        return;
+    }
+    
+    fetch('/admin/docker_config/delete/' + serverId, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            // Remove the row from the table with animation
+            const serverRow = document.getElementById('server-' + serverId);
+            serverRow.style.transition = 'all 0.3s ease';
+            serverRow.style.opacity = '0';
+            serverRow.style.transform = 'translateX(-20px)';
+            
+            setTimeout(() => {
+                serverRow.remove();
+                
+                // Check if table is empty and show empty state if needed
+                const tbody = document.querySelector('.server-table tbody');
+                if (tbody && tbody.children.length === 0) {
+                    location.reload(); // Reload to show empty state
+                }
+            }, 300);
+            
+            // Show success toast
+            showToast('success', 'Server Deleted', `Server "${serverName}" has been successfully deleted.`, 'fas fa-trash-alt');
+        } else {
+            showToast('error', 'Delete Failed', data.message, 'fas fa-exclamation-triangle');
+        }
+    })
+    .catch(error => {
+        showToast('error', 'Delete Failed', 'Network error: ' + error.message, 'fas fa-exclamation-triangle');
+    });
+}
+</script>
+{% endblock scripts %}

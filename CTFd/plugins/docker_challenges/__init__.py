@@ -2,6 +2,15 @@ import traceback
 import threading
 import time
 from datetime import datetime
+import socket
+import tempfile
+import requests
+import json
+import hashlib
+import random
+import time
+import threading
+import traceback
 
 from CTFd.plugins.challenges import BaseChallenge, CHALLENGE_CLASSES, get_chal_class
 from CTFd.plugins.flags import get_flag_class
@@ -23,6 +32,7 @@ from CTFd.api.v1.challenges import ChallengeList, Challenge
 from flask_restx import Namespace, Resource
 from flask import request, Blueprint, jsonify, abort, render_template, url_for, redirect, session
 # from flask_wtf import FlaskForm
+from flask_wtf import FlaskForm
 from wtforms import (
     FileField,
     HiddenField,
@@ -52,18 +62,29 @@ from CTFd.utils.config import get_themes
 
 from pathlib import Path
 
+# Global variable for background cleanup thread
+cleanup_thread = None
+
 
 class DockerConfig(db.Model):
     """
 	Docker Config Model. This model stores the config for docker API connections.
+	Now supports multiple servers with optional domain mapping.
 	"""
     id = db.Column(db.Integer, primary_key=True)
-    hostname = db.Column("hostname", db.String(64), index=True)
+    name = db.Column("name", db.String(128), nullable=False, index=True)  # Server name/identifier
+    hostname = db.Column("hostname", db.String(128), index=True)
+    domain = db.Column("domain", db.String(256), nullable=True, index=True)  # Optional subdomain
     tls_enabled = db.Column("tls_enabled", db.Boolean, default=False, index=True)
     ca_cert = db.Column("ca_cert", db.String(2200), index=True)
     client_cert = db.Column("client_cert", db.String(2000), index=True)
     client_key = db.Column("client_key", db.String(3300), index=True)
     repositories = db.Column("repositories", db.String(1024), index=True)
+    is_active = db.Column("is_active", db.Boolean, default=True, index=True)  # Enable/disable server
+    created_at = db.Column("created_at", db.DateTime, default=datetime.utcnow)
+    last_status_check = db.Column("last_status_check", db.DateTime, nullable=True)
+    status = db.Column("status", db.String(32), default="unknown")  # online, offline, error
+    status_message = db.Column("status_message", db.String(512), nullable=True)
 
 
 class DockerChallengeTracker(db.Model):
@@ -80,17 +101,28 @@ class DockerChallengeTracker(db.Model):
     ports = db.Column('ports', db.String(128), index=True)
     host = db.Column('host', db.String(128), index=True)
     challenge = db.Column('challenge', db.String(256), index=True)
+    docker_config_id = db.Column("docker_config_id", db.Integer, db.ForeignKey('docker_config.id'), index=True)  # Which server was used
+    
+    # Relationship to get server info
+    docker_config = db.relationship('DockerConfig', backref='active_containers')
 
-class DockerConfigForm(BaseForm):
+class DockerConfigForm(FlaskForm):
     id = HiddenField()
+    name = StringField(
+        "Server Name", description="A friendly name for this Docker server (e.g., 'Main Server', 'PWN Server')"
+    )
     hostname = StringField(
         "Docker Hostname", description="The Hostname/IP and Port of your Docker Server"
+    )
+    domain = StringField(
+        "Domain (Optional)", description="Optional subdomain for this server (e.g., pwn.h7tex.com). Leave empty to show IP:port"
     )
     tls_enabled = RadioField('TLS Enabled?')
     ca_cert = FileField('CA Cert')
     client_cert = FileField('Client Cert')
     client_key = FileField('Client Key')
     repositories = SelectMultipleField('Repositories')
+    is_active = BooleanField('Server Active', default=True)
     submit = SubmitField('Submit')
 
 
@@ -98,78 +130,250 @@ def define_docker_admin(app):
     admin_docker_config = Blueprint('admin_docker_config', __name__, template_folder='templates',
                                     static_folder='assets')
 
-    @admin_docker_config.route("/admin/docker_config", methods=["GET", "POST"])
+    @admin_docker_config.route("/admin/docker_config", methods=["GET"])
     @admins_only
-    def docker_config():
-        docker = DockerConfig.query.filter_by(id=1).first()
+    def docker_config_list():
+        """List all Docker server configurations"""
+        servers = DockerConfig.query.all()
+        
+        # Update status for all servers
+        for server in servers:
+            if not server.last_status_check or (datetime.utcnow() - server.last_status_check).seconds > 300:  # Update every 5 minutes
+                update_server_status(server)
+        
+        return render_template("docker_config_list.html", servers=servers)
+
+    @admin_docker_config.route("/admin/docker_config/add", methods=["GET", "POST"])
+    @admins_only
+    @bypass_csrf_protection
+    def docker_config_add():
+        """Add new Docker server configuration"""
         form = DockerConfigForm()
+        
         if request.method == "POST":
-            if docker:
-                b = docker
-            else:
-                b = DockerConfig()
             try:
-                ca_cert = request.files['ca_cert'].stream.read()
-            except Exception:
-                ca_cert = ''
-            try:
-                client_cert = request.files['client_cert'].stream.read()
-            except Exception:
-                client_cert = ''
-            try:
-                client_key = request.files['client_key'].stream.read()
-            except Exception:
-                client_key = ''
-            if len(ca_cert) != 0: b.ca_cert = ca_cert
-            if len(client_cert) != 0: b.client_cert = client_cert
-            if len(client_key) != 0: b.client_key = client_key
-            b.hostname = request.form['hostname']
-            b.tls_enabled = request.form['tls_enabled']
-            if b.tls_enabled == "True":
-                b.tls_enabled = True
-            else:
-                b.tls_enabled = False
-            if not b.tls_enabled:
-                b.ca_cert = None
-                b.client_cert = None
-                b.client_key = None
-            try:
-                b.repositories = ','.join(request.form.to_dict(flat=False)['repositories'])
-            except Exception:
-                b.repositories = None
-            db.session.add(b)
-            db.session.commit()
-            docker = DockerConfig.query.filter_by(id=1).first()
+                # Create new server config
+                server = DockerConfig()
+                server.name = request.form['name']
+                server.hostname = request.form['hostname']
+                server.domain = request.form.get('domain', '').strip() or None
+                server.tls_enabled = request.form['tls_enabled'] == "True"
+                server.is_active = 'is_active' in request.form
+                
+                # Handle certificate files
+                try:
+                    ca_cert = request.files['ca_cert'].stream.read()
+                    if len(ca_cert) != 0: 
+                        server.ca_cert = ca_cert.decode('utf-8')
+                except Exception:
+                    pass
+                
+                try:
+                    client_cert = request.files['client_cert'].stream.read()
+                    if len(client_cert) != 0: 
+                        server.client_cert = client_cert.decode('utf-8')
+                except Exception:
+                    pass
+                
+                try:
+                    client_key = request.files['client_key'].stream.read()
+                    if len(client_key) != 0: 
+                        server.client_key = client_key.decode('utf-8')
+                except Exception:
+                    pass
+                
+                if not server.tls_enabled:
+                    server.ca_cert = None
+                    server.client_cert = None
+                    server.client_key = None
+                
+                # Handle repositories
+                try:
+                    server.repositories = ','.join(request.form.to_dict(flat=False)['repositories'])
+                except Exception:
+                    server.repositories = None
+                
+                db.session.add(server)
+                db.session.commit()
+                
+                # Test the server connection
+                update_server_status(server)
+                
+                return redirect(url_for('admin_docker_config.docker_config_list'))
+                
+            except Exception as e:
+                print(f"Error adding server: {str(e)}")
+                form.errors['general'] = [f"Error adding server: {str(e)}"]
+        
+        # Get repositories for form (try to get from any available server)
         try:
-            repos = get_repositories(docker)
+            repos = []
+            servers = DockerConfig.query.filter_by(is_active=True).all()
+            for server in servers:
+                try:
+                    server_repos = get_repositories(server)
+                    repos.extend(server_repos)
+                except Exception:
+                    continue
+            repos = list(set(repos))  # Remove duplicates
         except Exception:
-            repos = list()
+            repos = []
+        
+        if len(repos) == 0:
+            form.repositories.choices = [("ERROR", "No servers available or connection failed")]
+        else:
+            form.repositories.choices = [(d, d) for d in repos]
+        
+        return render_template("docker_config_form.html", form=form, action="Add", server=None)
+
+    @admin_docker_config.route("/admin/docker_config/edit/<int:server_id>", methods=["GET", "POST"])
+    @admins_only
+    @bypass_csrf_protection
+    def docker_config_edit(server_id):
+        """Edit existing Docker server configuration"""
+        server = DockerConfig.query.get_or_404(server_id)
+        form = DockerConfigForm()
+        
+        if request.method == "POST":
+            try:
+                server.name = request.form['name']
+                server.hostname = request.form['hostname']
+                server.domain = request.form.get('domain', '').strip() or None
+                server.tls_enabled = request.form['tls_enabled'] == "True"
+                server.is_active = 'is_active' in request.form
+                
+                # Handle certificate files (only update if new files provided)
+                try:
+                    ca_cert = request.files['ca_cert'].stream.read()
+                    if len(ca_cert) != 0: 
+                        server.ca_cert = ca_cert.decode('utf-8')
+                except Exception:
+                    pass
+                
+                try:
+                    client_cert = request.files['client_cert'].stream.read()
+                    if len(client_cert) != 0: 
+                        server.client_cert = client_cert.decode('utf-8')
+                except Exception:
+                    pass
+                
+                try:
+                    client_key = request.files['client_key'].stream.read()
+                    if len(client_key) != 0: 
+                        server.client_key = client_key.decode('utf-8')
+                except Exception:
+                    pass
+                
+                if not server.tls_enabled:
+                    server.ca_cert = None
+                    server.client_cert = None
+                    server.client_key = None
+                
+                # Handle repositories
+                try:
+                    server.repositories = ','.join(request.form.to_dict(flat=False)['repositories'])
+                except Exception:
+                    server.repositories = None
+                
+                db.session.commit()
+                
+                # Test the server connection
+                update_server_status(server)
+                
+                return redirect(url_for('admin_docker_config.docker_config_list'))
+                
+            except Exception as e:
+                print(f"Error updating server: {str(e)}")
+                form.errors['general'] = [f"Error updating server: {str(e)}"]
+        
+        # Pre-populate form with existing data
+        if request.method == "GET":
+            form.name.data = server.name
+            form.hostname.data = server.hostname
+            form.domain.data = server.domain
+            form.tls_enabled.data = "True" if server.tls_enabled else "False"
+            form.is_active.data = server.is_active
+        
+        # Get repositories for this server
+        try:
+            repos = get_repositories(server)
+        except Exception:
+            repos = []
+        
         if len(repos) == 0:
             form.repositories.choices = [("ERROR", "Failed to Connect to Docker")]
         else:
             form.repositories.choices = [(d, d) for d in repos]
-        dconfig = DockerConfig.query.first()
+        
+        # Set selected repositories
         try:
-            selected_repos = dconfig.repositories
-            if selected_repos == None:
-                selected_repos = list()
-        # selected_repos = dconfig.repositories.split(',')
+            if server.repositories:
+                selected_repos = server.repositories.split(',')
+                form.repositories.data = selected_repos
         except Exception:
-            selected_repos = []
-        return render_template("docker_config.html", config=dconfig, form=form, repos=selected_repos)
+            pass
+        
+        return render_template("docker_config_form.html", form=form, action="Edit", server=server)
+
+    @admin_docker_config.route("/admin/docker_config/delete/<int:server_id>", methods=["POST"])
+    @admins_only
+    @bypass_csrf_protection
+    def docker_config_delete(server_id):
+        """Delete Docker server configuration"""
+        try:
+            server = DockerConfig.query.get_or_404(server_id)
+            
+            # Check if server has active containers
+            active_containers = DockerChallengeTracker.query.filter_by(docker_config_id=server_id).count()
+            if active_containers > 0:
+                return jsonify({"success": False, "message": f"Cannot delete server with {active_containers} active containers"}), 400
+            
+            db.session.delete(server)
+            db.session.commit()
+            
+            return jsonify({"success": True, "message": "Server deleted successfully"})
+        except Exception as e:
+            return jsonify({"success": False, "message": f"Error deleting server: {str(e)}"}), 500
+
+    @admin_docker_config.route("/admin/docker_config/test/<int:server_id>", methods=["POST"])
+    @admins_only
+    @bypass_csrf_protection
+    def docker_config_test(server_id):
+        """Test Docker server connection"""
+        try:
+            server = DockerConfig.query.get_or_404(server_id)
+            is_healthy, message = update_server_status(server)
+            
+            return jsonify({
+                "success": is_healthy,
+                "message": message,
+                "status": server.status
+            })
+        except Exception as e:
+            return jsonify({"success": False, "message": f"Error testing server: {str(e)}"}), 500
 
     app.register_blueprint(admin_docker_config)
 
 
 def define_docker_status(app):
-    admin_docker_status = Blueprint('admin_docker_status', __name__, template_folder='templates',
-                                    static_folder='assets')
+    docker_status = Blueprint('docker_status', __name__, template_folder='templates',
+                              static_folder='assets')
 
-    @admin_docker_status.route("/admin/docker_status", methods=["GET", "POST"])
+    @docker_status.route("/admin/docker_status", methods=["GET", "POST"])
     @admins_only
     def docker_admin():
-        docker_config = DockerConfig.query.filter_by(id=1).first()
+        # Get all servers and their status
+        servers = DockerConfig.query.all()
+        
+        # Update server statuses if needed
+        for server in servers:
+            if not server.last_status_check or (datetime.utcnow() - server.last_status_check).seconds > 300:
+                update_server_status(server)
+        
+        # Get all active containers with server information
         docker_tracker = DockerChallengeTracker.query.all()
+        
+        # Enhance tracker data with user/team names and server info
         for i in docker_tracker:
             if is_teams_mode():
                 if i.team_id is not None:
@@ -183,9 +387,21 @@ def define_docker_status(app):
                     i.user_id = name.name if name else f"Unknown User ({i.user_id})"
                 else:
                     i.user_id = "Unknown User (None)"
-        return render_template("admin_docker_status.html", dockers=docker_tracker)
+            
+            # Add server name for display
+            if i.docker_config:
+                i.server_name = i.docker_config.name
+                i.server_domain = i.docker_config.domain
+            else:
+                i.server_name = "Unknown Server"
+                i.server_domain = None
+        
+        return render_template("admin_docker_status.html", 
+                             dockers=docker_tracker, 
+                             servers=servers,
+                             now=datetime.utcnow())
 
-    app.register_blueprint(admin_docker_status)
+    app.register_blueprint(docker_status)
 
 
 kill_container = Namespace("nuke", description='Endpoint to nuke containers')
@@ -198,17 +414,14 @@ class KillContainerAPI(Resource):
         try:
             container = request.args.get('container')
             full = request.args.get('all')
-            docker_config = DockerConfig.query.filter_by(id=1).first()
             
-            if not docker_config:
-                return {"success": False, "message": "Docker configuration not found"}, 500
-                
             docker_tracker = DockerChallengeTracker.query.all()
             
             if full == "true":
                 for c in docker_tracker:
                     try:
-                        delete_container(docker_config, c.instance_id)
+                        if c.docker_config:
+                            delete_container(c.docker_config, c.instance_id)
                         # Delete the tracker record individually
                         tracker_to_delete = DockerChallengeTracker.query.filter_by(instance_id=c.instance_id).first()
                         if tracker_to_delete:
@@ -220,7 +433,9 @@ class KillContainerAPI(Resource):
 
             elif container != 'null' and container in [c.instance_id for c in docker_tracker]:
                 try:
-                    delete_container(docker_config, container)
+                    container_to_delete = DockerChallengeTracker.query.filter_by(instance_id=container).first()
+                    if container_to_delete and container_to_delete.docker_config:
+                        delete_container(container_to_delete.docker_config, container)
                     # Delete the tracker record individually
                     tracker_to_delete = DockerChallengeTracker.query.filter_by(instance_id=container).first()
                     if tracker_to_delete:
@@ -239,6 +454,89 @@ class KillContainerAPI(Resource):
             print(f"Error in nuke endpoint: {str(e)}")
             traceback.print_exc()
             return {"success": False, "message": f"Internal server error: {str(e)}"}, 500
+
+
+def check_server_health(docker_config):
+    """
+    Check if a Docker server is healthy and update its status
+    Returns: (is_healthy: bool, status_message: str)
+    """
+    try:
+        # Test Docker API connection
+        r = do_request(docker_config, '/version', timeout=10)
+        
+        if r is None:
+            return False, "Connection timeout or failed"
+        
+        if not hasattr(r, 'status_code') or r.status_code != 200:
+            return False, f"Docker API returned status {r.status_code if hasattr(r, 'status_code') else 'unknown'}"
+        
+        # If we have a domain, try to validate it resolves to the same IP
+        if docker_config.domain:
+            try:
+                import socket
+                # Extract IP from hostname (remove port if present)
+                server_ip = docker_config.hostname.split(':')[0]
+                domain_ip = socket.gethostbyname(docker_config.domain.split(':')[0])
+                
+                if server_ip != domain_ip and server_ip != '127.0.0.1' and server_ip != 'localhost':
+                    return True, f"Warning: Domain {docker_config.domain} resolves to {domain_ip}, but server is at {server_ip}"
+            except socket.gaierror:
+                return True, f"Warning: Domain {docker_config.domain} does not resolve"
+            except Exception as e:
+                return True, f"Warning: Could not validate domain: {str(e)}"
+        
+        return True, "Online"
+        
+    except Exception as e:
+        return False, f"Error: {str(e)}"
+
+
+def update_server_status(docker_config):
+    """
+    Update a server's status in the database
+    """
+    try:
+        is_healthy, message = check_server_health(docker_config)
+        
+        docker_config.last_status_check = datetime.utcnow()
+        docker_config.status = "online" if is_healthy else "error"
+        docker_config.status_message = message
+        
+        db.session.commit()
+        
+        return is_healthy, message
+    except Exception as e:
+        print(f"Error updating server status: {str(e)}")
+        return False, f"Update failed: {str(e)}"
+
+
+def get_best_server_for_image(image_name):
+    """
+    Find the best available server that has the requested image
+    Returns the DockerConfig object or None
+    """
+    try:
+        # Get all active servers
+        servers = DockerConfig.query.filter_by(is_active=True).all()
+        
+        for server in servers:
+            try:
+                # Check if server has the image
+                repositories = get_repositories(server, tags=True)
+                if image_name in repositories:
+                    # Check if server is healthy
+                    is_healthy, _ = check_server_health(server)
+                    if is_healthy:
+                        return server
+            except Exception as e:
+                print(f"Error checking server {server.name}: {str(e)}")
+                continue
+        
+        return None
+    except Exception as e:
+        print(f"Error finding best server: {str(e)}")
+        return None
 
 
 def do_request(docker, url, headers=None, method='GET', timeout=30):
@@ -323,11 +621,13 @@ def get_repositories(docker, tags=False, repos=False):
             for i in images:
                 if not i['RepoTags'] == []:
                     if not i['RepoTags'][0].split(':')[0] == '<none>':
+                        image_name = i['RepoTags'][0].split(':')[0]
                         if repos:
-                            if not i['RepoTags'][0].split(':')[0] in repos:
+                            # repos is a list of allowed repository names
+                            if image_name not in repos:
                                 continue
                         if not tags:
-                            result.append(i['RepoTags'][0].split(':')[0])
+                            result.append(image_name)
                         else:
                             result.append(i['RepoTags'][0])
         except Exception as e:
@@ -512,7 +812,7 @@ def create_container(docker, image, team, portbl):
                 print(f"ERROR: Container start failed with status {s.status_code}: {s.text}")
                 raise Exception(f"Container start failed: {s.text}")
         
-        return result, data
+        return result, data, docker  # Return the docker config used
     except Exception as e:
         print(f"ERROR in create_container(): {str(e)}")
         import traceback
@@ -614,6 +914,8 @@ class DockerChallengeType(BaseChallenge):
             'name': challenge.name,
             'value': challenge.value,
             'docker_image': challenge.docker_image,
+            'docker_config_id': challenge.docker_config_id,
+            'server_name': challenge.docker_config.name if challenge.docker_config else 'Unknown Server',
             'description': challenge.description,
             'category': challenge.category,
             'state': challenge.state,
@@ -632,12 +934,41 @@ class DockerChallengeType(BaseChallenge):
     def create(request):
         """
 		This method is used to process the challenge creation request.
+		Now handles server selection for multi-server setup.
 
 		:param request:
 		:return:
 		"""
         data = request.form or request.get_json()
-        challenge = DockerChallenge(**data)
+        
+        # Handle the new format: "ServerName | ImageName"
+        docker_image_selection = data.get('docker_image', '')
+        
+        if ' | ' in docker_image_selection:
+            # New format
+            server_name, image_name = docker_image_selection.split(' | ', 1)
+            server = DockerConfig.query.filter_by(name=server_name, is_active=True).first()
+            if not server:
+                raise Exception(f"Server '{server_name}' not found or inactive")
+            
+            challenge_data = dict(data)
+            challenge_data['docker_image'] = image_name
+            challenge_data['docker_config_id'] = server.id
+        else:
+            # Backward compatibility: try to find any server that has this image
+            image_name = docker_image_selection
+            server = get_best_server_for_image(image_name)
+            if not server:
+                # Fallback to first server for backward compatibility
+                server = DockerConfig.query.filter_by(is_active=True).first()
+                if not server:
+                    raise Exception("No active Docker servers available")
+            
+            challenge_data = dict(data)
+            challenge_data['docker_image'] = image_name
+            challenge_data['docker_config_id'] = server.id
+        
+        challenge = DockerChallenge(**challenge_data)
         db.session.add(challenge)
         db.session.commit()
         return challenge
@@ -676,7 +1007,7 @@ class DockerChallengeType(BaseChallenge):
 		"""
         data = request.form or request.get_json()
         submission = data["submission"].strip()
-        docker = DockerConfig.query.filter_by(id=1).first()
+        
         try:
             if is_teams_mode():
                 docker_containers = DockerChallengeTracker.query.filter_by(
@@ -684,10 +1015,15 @@ class DockerChallengeType(BaseChallenge):
             else:
                 docker_containers = DockerChallengeTracker.query.filter_by(
                     docker_image=challenge.docker_image).filter_by(user_id=user.id).first()
-            delete_container(docker, docker_containers.instance_id)
-            DockerChallengeTracker.query.filter_by(instance_id=docker_containers.instance_id).delete()
-        except:
-            pass
+            
+            if docker_containers and docker_containers.docker_config:
+                delete_container(docker_containers.docker_config, docker_containers.instance_id)
+                DockerChallengeTracker.query.filter_by(instance_id=docker_containers.instance_id).delete()
+                db.session.commit()
+        except Exception as e:
+            print(f"Warning: Error cleaning up container on solve: {str(e)}")
+            # Continue anyway
+        
         solve = Solves(
             user_id=user.id,
             team_id=team.id if team else None,
@@ -728,6 +1064,10 @@ class DockerChallenge(Challenges):
     __mapper_args__ = {'polymorphic_identity': 'docker'}
     id = db.Column(None, db.ForeignKey('challenges.id'), primary_key=True)
     docker_image = db.Column(db.String(128), index=True)
+    docker_config_id = db.Column("docker_config_id", db.Integer, db.ForeignKey('docker_config.id'), index=True)  # Which server to use
+    
+    # Relationship to get server info
+    docker_config = db.relationship('DockerConfig')
 
 
 # API
@@ -756,15 +1096,16 @@ class ContainerAPI(Resource):
             if not isinstance(challenge, str) or len(challenge) > 256:
                 return abort(400, "Invalid challenge name")
             
-            docker = DockerConfig.query.filter_by(id=1).first()
+            # Find the best server for this container image
+            docker = get_best_server_for_image(container)
             if not docker:
-                return abort(500, "Docker configuration not found")
+                return abort(500, f"No available Docker server found for image: {container}")
             
             # Check if container exists in repository
             try:
                 repositories = get_repositories(docker, tags=True)
                 if container not in repositories:
-                    return abort(403, f"Container {container} not present in the repository.")
+                    return abort(403, f"Container {container} not present in the repository on server {docker.name}.")
             except Exception as e:
                 print(f"Error getting repositories: {str(e)}")
                 import traceback
@@ -798,7 +1139,8 @@ class ContainerAPI(Resource):
                     if is_teams_mode():
                         if i.team_id is not None and int(session.id) == int(i.team_id) and container_age >= 7200:
                             try:
-                                delete_container(docker, i.instance_id)
+                                if i.docker_config:
+                                    delete_container(i.docker_config, i.instance_id)
                                 DockerChallengeTracker.query.filter_by(instance_id=i.instance_id).delete()
                                 db.session.commit()
                             except Exception as e:
@@ -806,7 +1148,8 @@ class ContainerAPI(Resource):
                     else:
                         if i.user_id is not None and int(session.id) == int(i.user_id) and container_age >= 7200:
                             try:
-                                delete_container(docker, i.instance_id)
+                                if i.docker_config:
+                                    delete_container(i.docker_config, i.instance_id)
                                 DockerChallengeTracker.query.filter_by(instance_id=i.instance_id).delete()
                                 db.session.commit()
                             except Exception as e:
@@ -840,7 +1183,8 @@ class ContainerAPI(Resource):
             # Delete when requested
             elif check != None and request.args.get('stopcontainer'):
                 try:
-                    delete_container(docker, check.instance_id)
+                    if check.docker_config:
+                        delete_container(check.docker_config, check.instance_id)
                     if is_teams_mode():
                         DockerChallengeTracker.query.filter_by(team_id=session.id).filter_by(docker_image=container).delete()
                     else:
@@ -855,7 +1199,8 @@ class ContainerAPI(Resource):
             # The exception would be if we are reverting a box. So we'll delete it if it exists and has been around for more than 5 minutes.
             elif check != None:
                 try:
-                    delete_container(docker, check.instance_id)
+                    if check.docker_config:
+                        delete_container(check.docker_config, check.instance_id)
                     if is_teams_mode():
                         DockerChallengeTracker.query.filter_by(team_id=session.id).filter_by(docker_image=container).delete()
                     else:
@@ -878,7 +1223,8 @@ class ContainerAPI(Resource):
                 
                 if container_age >= 300:
                     try:
-                        delete_container(docker, i.instance_id)
+                        if i.docker_config:
+                            delete_container(i.docker_config, i.instance_id)
                         containers_to_remove.append(i)
                     except Exception as e:
                         print(f"Error deleting expired container {i.instance_id}: {str(e)}")
@@ -911,6 +1257,10 @@ class ContainerAPI(Resource):
                 create = create_container(docker, container, session.name, portsbl)
                 
                 ports = json.loads(create[1])['HostConfig']['PortBindings'].values()
+                
+                # Determine what host/domain to show to user
+                display_host = docker.domain if docker.domain else str(docker.hostname).split(':')[0]
+                
                 entry = DockerChallengeTracker(
                     team_id=session.id if is_teams_mode() else None,
                     user_id=session.id if not is_teams_mode() else None,
@@ -919,8 +1269,9 @@ class ContainerAPI(Resource):
                     revert_time=unix_time(datetime.utcnow()) + 300,
                     instance_id=create[0]['Id'],
                     ports=','.join([p[0]['HostPort'] for p in ports]),
-                    host=str(docker.hostname).split(':')[0],
-                    challenge=challenge
+                    host=display_host,
+                    challenge=challenge,
+                    docker_config_id=docker.id
                 )
                 db.session.add(entry)
                 db.session.commit()
@@ -950,7 +1301,6 @@ class DockerStatus(Resource):
 
     @authed_only
     def get(self):
-        docker = DockerConfig.query.filter_by(id=1).first()
         if is_teams_mode():
             session = get_current_team()
             tracker = DockerChallengeTracker.query.filter_by(team_id=session.id)
@@ -966,7 +1316,8 @@ class DockerStatus(Resource):
             container_age = unix_time(datetime.utcnow()) - int(container.timestamp)
             if container_age >= 300:  # 5 minutes
                 try:
-                    delete_container(docker, container.instance_id)
+                    if container.docker_config:
+                        delete_container(container.docker_config, container.instance_id)
                     global_containers_to_remove.append(container)
                 except Exception as e:
                     print(f"Error deleting expired container {container.instance_id}: {str(e)}")
@@ -995,13 +1346,19 @@ class DockerStatus(Resource):
             # Check if container has expired (older than 5 minutes = 300 seconds)
             if (unix_time(datetime.utcnow()) - int(i.timestamp)) >= 300:
                 try:
-                    delete_container(docker, i.instance_id)
+                    if i.docker_config:
+                        delete_container(i.docker_config, i.instance_id)
                     containers_to_remove.append(i)
                 except Exception as e:
                     print(f"Error deleting expired container {i.instance_id}: {str(e)}")
                     # Only remove from DB if Docker deletion was successful
                     continue
                 continue
+            
+            # Determine display host (domain or IP)
+            display_host = i.host  # This is already set correctly in container creation
+            if i.docker_config and i.docker_config.domain:
+                display_host = i.docker_config.domain.split(':')[0]
                 
             data.append({
                 'id': i.id,
@@ -1012,7 +1369,8 @@ class DockerStatus(Resource):
                 'revert_time': i.revert_time,
                 'instance_id': i.instance_id,
                 'ports': i.ports.split(','),
-                'host': str(docker.hostname).split(':')[0]
+                'host': display_host,
+                'server_name': i.docker_config.name if i.docker_config else 'Unknown Server'
             })
         
         # Remove expired containers from database
@@ -1036,40 +1394,97 @@ docker_namespace = Namespace("docker", description='Endpoint to retrieve dockers
 class DockerAPI(Resource):
     """
 	This is for creating Docker Challenges. The purpose of this API is to populate the Docker Image Select form
-	object in the Challenge Creation Screen.
+	object in the Challenge Creation Screen. Now returns images grouped by server.
 	"""
 
     @admins_only
     def get(self):
-        docker = DockerConfig.query.filter_by(id=1).first()
-        images = get_repositories(docker, tags=True, repos=docker.repositories)
-        if images:
-            data = list()
-            for i in images:
-                data.append({'name': i})
+        try:
+            servers = DockerConfig.query.filter_by(is_active=True).all()
+            if not servers:
+                return {
+                    'success': False,
+                    'data': [{'name': 'Error: No Docker servers configured!'}]
+                }, 400
+            
+            data = []
+            
+            for server in servers:
+                try:
+                    # Convert repositories string to list if it exists
+                    server_repos = None
+                    if server.repositories:
+                        server_repos = server.repositories.split(',')
+                    
+                    images = get_repositories(server, tags=True, repos=server_repos)
+                    if images:
+                        for image in images:
+                            # Format: "ServerName | ImageName" for dropdown display
+                            display_name = f"{server.name} | {image}"
+                            data.append({
+                                'name': display_name,
+                                'server_id': server.id,
+                                'server_name': server.name,
+                                'image_name': image,
+                                'server_domain': server.domain
+                            })
+                except Exception as e:
+                    print(f"Error getting images from server {server.name}: {str(e)}")
+                    # Add error entry for this server
+                    data.append({
+                        'name': f"{server.name} | ERROR: {str(e)}",
+                        'server_id': server.id,
+                        'server_name': server.name,
+                        'image_name': None,
+                        'error': True
+                    })
+            
+            if not data:
+                return {
+                    'success': False,
+                    'data': [{'name': 'Error: No images found on any server!'}]
+                }, 400
+            
             return {
                 'success': True,
                 'data': data
             }
-        else:
+            
+        except Exception as e:
+            print(f"Error in DockerAPI: {str(e)}")
             return {
-                       'success': False,
-                       'data': [
-                           {
-                               'name': 'Error in Docker Config!'
-                           }
-                       ]
-                   }, 400
+                'success': False,
+                'data': [{'name': f'Error: {str(e)}'}]
+            }, 500
 
 
 
 def load(app):
-    app.db.create_all()
+    # Create tables first
+    try:
+        app.db.create_all()
+        print("Database tables created/verified successfully")
+    except Exception as e:
+        print(f"Error creating database tables: {str(e)}")
+    
+    # Run database migration
+    try:
+        migrate_old_config()
+    except Exception as e:
+        print(f"Migration failed: {str(e)}")
+        print("Plugin will continue loading but some features may not work correctly")
+    
     CHALLENGE_CLASSES['docker'] = DockerChallengeType
+    
     @app.template_filter('datetimeformat')
     def datetimeformat(value, format='%Y-%m-%d %H:%M:%S'):
         return datetime.fromtimestamp(value).strftime(format)
+    
     register_plugin_assets_directory(app, base_path='/plugins/docker_challenges/assets')
+    
+    # Register single Docker menu item - commented out to avoid duplication with dropdown
+    # register_admin_plugin_menu_bar(title='Docker', route='/admin/docker_config')
+    
     define_docker_admin(app)
     define_docker_status(app)
     CTFd_API_v1.add_namespace(docker_namespace, '/docker')
@@ -1078,14 +1493,183 @@ def load(app):
     CTFd_API_v1.add_namespace(kill_container, '/nuke')
     
     # Start the background cleanup thread
-    start_cleanup_thread()
-    print("Docker challenges plugin loaded with background cleanup")
+    try:
+        start_cleanup_thread(app)
+        print("Docker challenges plugin loaded with multi-server support and background cleanup")
+    except Exception as e:
+        print(f"Error starting cleanup thread: {str(e)}")
+        print("Plugin loaded but background cleanup is disabled")
+
+
+def migrate_old_config():
+    """
+    Migrate old single-server configuration to new multi-server format
+    """
+    try:
+        # First, check if we need to add new columns to existing table
+        from sqlalchemy import text
+        
+        print("Checking database schema for Docker plugin...")
+        
+        # Check if new columns exist
+        columns_to_add = [
+            ("name", "VARCHAR(128)"),
+            ("domain", "VARCHAR(256)"),
+            ("is_active", "BOOLEAN DEFAULT TRUE"),
+            ("created_at", "DATETIME"),
+            ("last_status_check", "DATETIME"),
+            ("status", "VARCHAR(32) DEFAULT 'unknown'"),
+            ("status_message", "VARCHAR(512)")
+        ]
+        
+        for column_name, column_def in columns_to_add:
+            try:
+                # Try to query the column to see if it exists
+                result = db.session.execute(text(f"SELECT {column_name} FROM docker_config LIMIT 1")).fetchone()
+            except Exception as e:
+                if "Unknown column" in str(e) or "no such column" in str(e):
+                    print(f"Adding missing column: {column_name}")
+                    try:
+                        # Add the missing column
+                        db.session.execute(text(f"ALTER TABLE docker_config ADD COLUMN {column_name} {column_def}"))
+                        db.session.commit()
+                        print(f"Successfully added column: {column_name}")
+                    except Exception as alter_error:
+                        print(f"Error adding column {column_name}: {str(alter_error)}")
+                        db.session.rollback()
+                else:
+                    print(f"Error checking column {column_name}: {str(e)}")
+        
+        # Now check if we need to add columns to docker_challenge_tracker
+        tracker_columns_to_add = [
+            ("docker_config_id", "INTEGER")
+        ]
+        
+        for column_name, column_def in tracker_columns_to_add:
+            try:
+                result = db.session.execute(text(f"SELECT {column_name} FROM docker_challenge_tracker LIMIT 1")).fetchone()
+            except Exception as e:
+                if "Unknown column" in str(e) or "no such column" in str(e):
+                    print(f"Adding missing column to tracker: {column_name}")
+                    try:
+                        db.session.execute(text(f"ALTER TABLE docker_challenge_tracker ADD COLUMN {column_name} {column_def}"))
+                        db.session.commit()
+                        print(f"Successfully added tracker column: {column_name}")
+                    except Exception as alter_error:
+                        print(f"Error adding tracker column {column_name}: {str(alter_error)}")
+                        db.session.rollback()
+        
+        # Check docker_challenge table
+        challenge_columns_to_add = [
+            ("docker_config_id", "INTEGER")
+        ]
+        
+        for column_name, column_def in challenge_columns_to_add:
+            try:
+                result = db.session.execute(text(f"SELECT {column_name} FROM docker_challenge LIMIT 1")).fetchone()
+            except Exception as e:
+                if "Unknown column" in str(e) or "no such column" in str(e):
+                    print(f"Adding missing column to challenge: {column_name}")
+                    try:
+                        db.session.execute(text(f"ALTER TABLE docker_challenge ADD COLUMN {column_name} {column_def}"))
+                        db.session.commit()
+                        print(f"Successfully added challenge column: {column_name}")
+                    except Exception as alter_error:
+                        print(f"Error adding challenge column {column_name}: {str(alter_error)}")
+                        db.session.rollback()
+        
+        # Now migrate existing data
+        try:
+            # Check if we have old config that needs migration
+            old_configs = db.session.execute(text("SELECT * FROM docker_config WHERE name IS NULL OR name = ''")).fetchall()
+            
+            if old_configs:
+                print(f"Migrating {len(old_configs)} existing Docker configurations...")
+                
+                for config_row in old_configs:
+                    config_id = config_row[0]  # Assuming id is first column
+                    print(f"Migrating config ID: {config_id}")
+                    
+                    # Update the config with default values
+                    db.session.execute(text("""
+                        UPDATE docker_config 
+                        SET name = 'Main Server',
+                            is_active = TRUE,
+                            status = 'unknown',
+                            created_at = NOW()
+                        WHERE id = :config_id AND (name IS NULL OR name = '')
+                    """), {"config_id": config_id})
+                
+                db.session.commit()
+                print("Successfully migrated existing configurations")
+            
+            # Migrate existing challenges
+            challenges_without_server = db.session.execute(text(
+                "SELECT id FROM docker_challenge WHERE docker_config_id IS NULL"
+            )).fetchall()
+            
+            if challenges_without_server:
+                print(f"Migrating {len(challenges_without_server)} existing challenges...")
+                
+                # Get the first available server
+                first_server = db.session.execute(text(
+                    "SELECT id FROM docker_config ORDER BY id LIMIT 1"
+                )).fetchone()
+                
+                if first_server:
+                    server_id = first_server[0]
+                    for challenge_row in challenges_without_server:
+                        challenge_id = challenge_row[0]
+                        db.session.execute(text("""
+                            UPDATE docker_challenge 
+                            SET docker_config_id = :server_id 
+                            WHERE id = :challenge_id
+                        """), {"server_id": server_id, "challenge_id": challenge_id})
+                    
+                    db.session.commit()
+                    print(f"Migrated {len(challenges_without_server)} challenges to server ID: {server_id}")
+            
+            # Migrate existing container tracker entries
+            containers_without_server = db.session.execute(text(
+                "SELECT id FROM docker_challenge_tracker WHERE docker_config_id IS NULL"
+            )).fetchall()
+            
+            if containers_without_server:
+                print(f"Migrating {len(containers_without_server)} existing container tracker entries...")
+                
+                first_server = db.session.execute(text(
+                    "SELECT id FROM docker_config ORDER BY id LIMIT 1"
+                )).fetchone()
+                
+                if first_server:
+                    server_id = first_server[0]
+                    for container_row in containers_without_server:
+                        container_id = container_row[0]
+                        db.session.execute(text("""
+                            UPDATE docker_challenge_tracker 
+                            SET docker_config_id = :server_id 
+                            WHERE id = :container_id
+                        """), {"server_id": server_id, "container_id": container_id})
+                    
+                    db.session.commit()
+                    print(f"Migrated {len(containers_without_server)} container tracker entries")
+                    
+        except Exception as e:
+            print(f"Data migration error: {str(e)}")
+            db.session.rollback()
+            
+        print("Database migration completed successfully!")
+            
+    except Exception as e:
+        print(f"Migration error: {str(e)}")
+        db.session.rollback()
+        # Don't fail the plugin load if migration has issues
 
 
 # Global cleanup thread variable
 cleanup_thread = None
 
-def background_cleanup():
+def background_cleanup(app):
     """
     Background thread function that runs every 60 seconds to clean up expired containers
     """
@@ -1093,44 +1677,45 @@ def background_cleanup():
         try:
             time.sleep(60)  # Run every 60 seconds
             
-            # Get all containers from database
-            containers = DockerChallengeTracker.query.all()
-            current_time = unix_time(datetime.utcnow())
-            
-            for container in containers:
-                container_age = current_time - container.timestamp
+            # Use application context for database operations
+            with app.app_context():
+                # Get all containers from database
+                containers = DockerChallengeTracker.query.all()
+                current_time = unix_time(datetime.utcnow())
                 
-                # Check if container has expired (older than 5 minutes = 300 seconds)
-                if container_age >= 300:
-                    try:
-                        # Get docker configuration
-                        docker = DockerConfig.query.first()
-                        if docker:
-                            # Delete the container
-                            delete_container(docker, container.instance_id)
-                    except Exception as e:
-                        print(f"Background cleanup - Error deleting container {container.instance_id}: {str(e)}")
+                for container in containers:
+                    container_age = current_time - container.timestamp
                     
-                    try:
-                        # Remove from database
-                        db.session.delete(container)
-                        db.session.commit()
-                    except Exception as e:
-                        print(f"Background cleanup - Error removing container from database: {str(e)}")
+                    # Check if container has expired (older than 5 minutes = 300 seconds)
+                    if container_age >= 300:
+                        try:
+                            # Use the container's associated docker config
+                            if container.docker_config:
+                                delete_container(container.docker_config, container.instance_id)
+                        except Exception as e:
+                            print(f"Background cleanup - Error deleting container {container.instance_id}: {str(e)}")
                         
+                        try:
+                            # Remove from database
+                            db.session.delete(container)
+                            db.session.commit()
+                        except Exception as e:
+                            print(f"Background cleanup - Error removing container from database: {str(e)}")
+                            
         except Exception as e:
             print(f"Background cleanup - Error in cleanup thread: {str(e)}")
             # Continue running even if there's an error
 
-def start_cleanup_thread():
+def start_cleanup_thread(app):
     """
     Start the background cleanup thread if it's not already running
     """
     global cleanup_thread
     
     if cleanup_thread is None or not cleanup_thread.is_alive():
-        cleanup_thread = threading.Thread(target=background_cleanup, daemon=True)
+        cleanup_thread = threading.Thread(target=background_cleanup, args=(app,), daemon=True)
         cleanup_thread.start()
         print("Background cleanup thread started")
     else:
+        print("Background cleanup thread already running")
         print("Background cleanup thread already running")

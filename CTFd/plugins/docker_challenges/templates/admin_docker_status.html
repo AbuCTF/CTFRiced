@@ -1,195 +1,435 @@
 {% extends 'admin/base.html' %}
+
 {% block content %}
-<div class="jumbotron">
+<style>
+.docker-status-header {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    color: white;
+    padding: 3rem 0;
+    margin-bottom: 2rem;
+}
+
+.status-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.status-card {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+    overflow: hidden;
+    transition: transform 0.3s ease, box-shadow 0.3s ease;
+}
+
+.status-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 25px rgba(0,0,0,0.12);
+}
+
+.status-card-header {
+    padding: 1.5rem;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.status-card-body {
+    padding: 1.5rem;
+}
+
+.server-name {
+    font-size: 1.25rem;
+    font-weight: 600;
+    color: #495057;
+    margin: 0;
+}
+
+.server-hostname {
+    font-size: 0.875rem;
+    color: #6c757d;
+    margin-top: 0.25rem;
+}
+
+.status-indicator {
+    width: 12px;
+    height: 12px;
+    border-radius: 50%;
+    margin-left: auto;
+    animation: pulse 2s infinite;
+}
+
+.status-indicator.online, .status-indicator.success {
+    background: #28a745;
+}
+
+.status-indicator.offline, .status-indicator.error, .status-indicator.danger {
+    background: #dc3545;
+    animation: none;
+}
+
+.status-indicator.unknown, .status-indicator.warning {
+    background: #ffc107;
+}
+
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.metric-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem 0;
+    border-bottom: 1px solid #f8f9fa;
+}
+
+.metric-row:last-child {
+    border-bottom: none;
+}
+
+.metric-label {
+    font-weight: 500;
+    color: #495057;
+}
+
+.metric-value {
+    color: #6c757d;
+    font-family: 'Courier New', monospace;
+}
+
+.metric-value.highlight {
+    color: #667eea;
+    font-weight: 600;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: #6c757d;
+}
+
+.empty-state i {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+}
+
+.btn-elegant {
+    padding: 0.75rem 1.5rem;
+    border-radius: 8px;
+    font-weight: 500;
+    transition: all 0.3s ease;
+}
+
+.btn-primary-elegant {
+    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+    border: none;
+    color: white;
+}
+
+.btn-primary-elegant:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(102, 126, 234, 0.3);
+    color: white;
+}
+
+.btn-danger-elegant {
+    background: linear-gradient(135deg, #e53e3e 0%, #c53030 100%);
+    border: none;
+    color: white;
+}
+
+.btn-danger-elegant:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px rgba(229, 62, 62, 0.3);
+    color: white;
+}
+
+.containers-table {
+    background: white;
+    border-radius: 12px;
+    box-shadow: 0 2px 20px rgba(0,0,0,0.08);
+    overflow: hidden;
+    margin-top: 2rem;
+}
+
+.containers-table-header {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-bottom: 1px solid #e9ecef;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.table-elegant {
+    margin: 0;
+}
+
+.table-elegant thead th {
+    border-top: none;
+    border-bottom: 2px solid #e9ecef;
+    font-weight: 600;
+    color: #495057;
+    background: #f8f9fa;
+}
+
+.table-elegant tbody tr:hover {
+    background: #f8f9ff;
+}
+
+.table-elegant td {
+    border-color: #f1f3f4;
+    vertical-align: middle;
+}
+
+.action-btn {
+    padding: 0.25rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.875rem;
+    margin: 0 0.25rem;
+}
+
+.last-updated {
+    font-size: 0.875rem;
+    color: #6c757d;
+    text-align: center;
+    margin-top: 2rem;
+}
+</style>
+
+<div class="docker-status-header">
     <div class="container">
-        <h1>Docker Status</h1>
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h1 class="mb-2">Docker Infrastructure Status</h1>
+                <p class="mb-0 opacity-75">Real-time monitoring of your Docker servers and container health</p>
+            </div>
+            <div class="col-md-4 text-md-right">
+                <a href="{{ url_for('admin_docker_config.docker_config_list') }}" class="btn btn-light me-3">
+                    <i class="fas fa-cog me-2"></i> Manage Servers
+                </a>
+                <button onclick="location.reload()" class="btn btn-light">
+                    <i class="fas fa-sync-alt me-2"></i> Refresh
+                </button>
+            </div>
+        </div>
     </div>
 </div>
+
 <div class="container">
-    <div class="row">
-        <div class="col-md-10 offset-md-1" >
-            {% for error in errors %}
-            <div class="alert alert-danger alert-dismissable" role="alert">
-                <span class="sr-only">Error:</span>
-                {{ error }}
-                <button type="button" class="close" data-dismiss="alert" aria-label="Close"><span aria-hidden="true">×</span></button>
+    {% for error in errors %}
+    <div class="alert alert-danger alert-dismissible fade show" role="alert">
+        {{ error }}
+        <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+    </div>
+    {% endfor %}
+    
+    {% if servers %}
+        <div class="status-cards">
+            {% for server in servers %}
+            <div class="status-card">
+                <div class="status-card-header">
+                    <div>
+                        <h3 class="server-name">{{ server.name }}</h3>
+                        <div class="server-hostname">
+                            {{ server.hostname }}
+                            {% if server.domain %}
+                                <span class="text-muted">→</span> {{ server.domain }}
+                            {% endif %}
+                        </div>
+                    </div>
+                    <div class="status-indicator {{ server.status }}"></div>
+                </div>
+                <div class="status-card-body">
+                    <div class="metric-row">
+                        <span class="metric-label">Status</span>
+                        <span class="metric-value highlight">{{ server.status|title }}</span>
+                    </div>
+                    <div class="metric-row">
+                        <span class="metric-label">TLS Security</span>
+                        <span class="metric-value">
+                            {% if server.tls_enabled %}
+                                <i class="fas fa-shield-alt text-success"></i> Enabled
+                            {% else %}
+                                <i class="fas fa-exclamation-triangle text-warning"></i> Disabled
+                            {% endif %}
+                        </span>
+                    </div>
+                    {% if not server.is_active %}
+                        <div class="metric-row">
+                            <span class="metric-label">Server Status</span>
+                            <span class="metric-value text-muted">Inactive</span>
+                        </div>
+                    {% endif %}
+                    {% if server.status_message and server.status != 'online' %}
+                        <div class="metric-row">
+                            <span class="metric-label">Message</span>
+                            <span class="metric-value text-danger">{{ server.status_message }}</span>
+                        </div>
+                    {% endif %}
+                </div>
             </div>
             {% endfor %}
-            {% if dockers %}
-            <table id='dockers' class="table table-striped">
+        </div>
+    {% else %}
+        <div class="empty-state">
+            <i class="fas fa-server"></i>
+            <h3>No Docker Servers Configured</h3>
+            <p>Add your first Docker server to start monitoring container infrastructure.</p>
+            <a href="{{ url_for('admin_docker_config.docker_config_add') }}" class="btn btn-primary-elegant">
+                <i class="fas fa-plus me-2"></i> Add Docker Server
+            </a>
+        </div>
+    {% endif %}
+    
+    {% if dockers %}
+    <div class="containers-table">
+        <div class="containers-table-header">
+            <h5 class="mb-0">Active Containers</h5>
+            <button type="button" class="btn btn-danger-elegant btn-sm" onclick="check_nuke_container(null, true)">
+                <i class="fas fa-bomb me-2"></i> Nuke All Containers
+            </button>
+        </div>
+        <div class="table-responsive">
+            <table id='dockers' class="table table-elegant">
                 <thead>
                     <tr>
-                        <th width="10px" class="text-center" style="cursor: pointer;" onclick="sortTable(0)">ID</th>
-                        <th class="text-left" style="cursor: pointer;" onclick="sortTable(1)">{% if dockers[0].team_id %}Team{% else %}User{% endif %}</th>
-                        <th class="text-left" style="cursor: pointer;" onclick="sortTable(2)">Docker Image</th>
-                        <th class="text-left" style="cursor: pointer;" onclick="sortTable(3)">Challenge</th>
-                        <th class="text-left" style="cursor: pointer;" onclick="sortTable(4)">Instance ID</th>
-                        <th class="text-left" style="cursor: pointer;" onclick="sortTable(5)">Start Time</th>
-                        <th class="text-left">Revoke</th>
+                        <th width="60px" class="text-center">ID</th>
+                        <th class="text-left">{% if dockers[0].team_id %}Team{% else %}User{% endif %}</th>
+                        <th class="text-left">Server</th>
+                        <th class="text-left">Docker Image</th>
+                        <th class="text-left">Challenge</th>
+                        <th class="text-left">Instance ID</th>
+                        <th class="text-left">Start Time</th>
+                        <th class="text-center">Actions</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for docker in dockers %}
                     <tr id='tr_{{docker.instance_id}}' name='{{docker.id}}'>
-                        <td class='text-left' value='{{docker.id}}'>{{docker.id}}</td>
+                        <td class='text-center' value='{{docker.id}}'>{{docker.id}}</td>
                         {% if docker.team_id %}
                         <td class='text-left' value='{{docker.team_id | safe }}'>{{docker.team_id | safe }}</td>
                         {% else %}
-                        <td class='text-left' value='{{docker.team_id | safe }}'>{{docker.user_id | safe }}</td>
+                        <td class='text-left' value='{{docker.user_id | safe }}'>{{docker.user_id | safe }}</td>
                         {% endif %}
+                        <td class='text-left' value='{{docker.server_name}}'>
+                            {{ docker.server_name }}
+                            {% if docker.server_domain %}
+                                <br><small class="text-info">{{ docker.server_domain }}</small>
+                            {% endif %}
+                        </td>
                         <td class='text-left' style="white-space: nowrap;" value='{{docker.docker_image}}'>{{docker.docker_image}}</td>
                         <td class='text-left' style="white-space: nowrap;" value='{{docker.challenge}}'>{{docker.challenge}}</td>
                         <td class='text-left' value='{{docker.instance_id | truncate(15)}}'>{{docker.instance_id | truncate(15)}}</td>
                         <td class='text-left' style="white-space: nowrap;" value='{{docker.timestamp}}'>{{docker.timestamp | datetimeformat }}</td>
-                        <td class='text-center'><a id="delete_{{docker.instance_id}}" style="cursor: pointer;" class="fas fa-trash" onclick="check_nuke_container('{{docker.instance_id}}', false)"></a></td>
+                        <td class='text-center'>
+                            <button class="btn btn-outline-danger action-btn" onclick="check_nuke_container('{{docker.instance_id}}', false)" title="Stop Container">
+                                <i class="fas fa-stop"></i>
+                            </button>
+                        </td>
                     </tr>
                     {% endfor %}
                 </tbody>
             </table>
-            <div class='text-center'>
-                <button type="button" class="btn btn-danger" onclick="check_nuke_container(null, true)">Nuke All Containers</button>
-            </div>
-            {% else %}
-            <h3 class='text-center'> No Docker Containers Active</h3>
-            {% endif %}
         </div>
     </div>
+    {% endif %}
+    
+    {% if servers %}
+        <div class="last-updated">
+            <i class="fas fa-clock me-1"></i>
+            Last updated: <span id="last-updated-time">{{ now.strftime('%Y-%m-%d %H:%M:%S') }}</span>
+        </div>
+    {% endif %}
 </div>
+
 {% endblock content %}
+
 {% block scripts %}
 <script>
-function sortTable(n) {
-    var table, rows, switching, i, x, y, shouldSwitch, dir, switchcount = 0;
-    table = document.getElementById("dockers");
-    switching = true;
-    dir = "asc";
-    while (switching) {
-        switching = false;
-        rows = table.rows;
-        for (i = 1; i < (rows.length - 1); i++) {
-            shouldSwitch = false;
-            x = rows[i].getElementsByTagName("TD")[n];
-            y = rows[i + 1].getElementsByTagName("TD")[n];
-            if (dir == "asc") {
-                if (x.innerHTML.toLowerCase() > y.innerHTML.toLowerCase()) {
-                    shouldSwitch = true;
-                    break;
-                }
-            } else if (dir == "desc") {
-                if (x.innerHTML.toLowerCase() < y.innerHTML.toLowerCase()) {
-                    shouldSwitch = true;
-                    break;
-                }
-            }
-        }
-        if (shouldSwitch) {
-            rows[i].parentNode.insertBefore(rows[i + 1], rows[i]);
-            switching = true;
-            switchcount++;
-        } else {
-            if (switchcount == 0 && dir == "asc") {
-                dir = "desc";
-                switching = true;
-            }
-        }
+// Enhanced container management functions
+function check_nuke_container(instance_id, nuke_all) {
+    let message;
+    if (nuke_all) {
+        message = "Are you sure you want to stop ALL active containers? This action cannot be undone.";
+    } else {
+        message = "Are you sure you want to stop this container?";
+    }
+    
+    if (confirm(message)) {
+        nuke_container(instance_id, nuke_all);
     }
 }
-</script>
-<script>
-function check_nuke_container(instance, all) {
-    ezq({
-        title: "Attention!",
-        body: "Are You Sure You want to do this?",
-        success: function() { nuke_container(instance, all) },
-    });
-}
 
-function nuke_container(instance, all) {
-    var xhttp = new XMLHttpRequest();
-    xhttp.onreadystatechange = function() {
-        if (this.readyState == 4 && this.status == 200) {
-            if (all == true) {
-                window.location = '{{ script_root }}/admin/docker_status'
-            }
-            else {
-                document.getElementById("tr_" + instance).style.display = "none";
-            }
-        } else if (this.readyState == 4 && this.status != 200) {
-            ezal({
-                title: "Attention!",
-                body: "Error when Deleting Docker Container",
-                button: "Got it!",
-            });
+function nuke_container(instance_id, nuke_all) {
+    const url = nuke_all ? 
+        '/api/v1/nuke?all=true' : 
+        `/api/v1/nuke?container=${instance_id}`;
+    
+    fetch(url, {
+        method: 'GET',
+        headers: {
+            'Content-Type': 'application/json'
         }
-    };
-    xhttp.open("GET", "/api/v1/nuke?container=" + instance + "&all=" + all, true);
-    xhttp.send();
-}
-</script>
-<script>
-var modal =
-    '<div class="modal fade" tabindex="-1" role="dialog">' +
-    '  <div class="modal-dialog" role="document">' +
-    '    <div class="modal-content">' +
-    '      <div class="modal-header">' +
-    '        <h5 class="modal-title">{0}</h5>' +
-    '        <button type="button" class="close" data-dismiss="modal" aria-label="Close">' +
-    '          <span aria-hidden="true">&times;</span>' +
-    "        </button>" +
-    "      </div>" +
-    '      <div class="modal-body">' +
-    "        <p>{1}</p>" +
-    "      </div>" +
-    '      <div class="modal-footer">' +
-    "      </div>" +
-    "    </div>" +
-    "  </div>" +
-    "</div>";
-
-function ezq(args) {
-    var res = modal.format(args.title, args.body);
-    var obj = $(res);
-    var deny =
-        '<button type="button" class="btn btn-danger" data-dismiss="modal">No</button>';
-    var confirm = $(
-        '<button type="button" class="btn btn-primary" data-dismiss="modal">Yes</button>'
-    );
-
-    obj.find(".modal-footer").append(deny);
-    obj.find(".modal-footer").append(confirm);
-
-    $("main").append(obj);
-
-    $(obj).on("hidden.bs.modal", function(e) {
-        $(this).modal("dispose");
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            if (nuke_all) {
+                location.reload();
+            } else {
+                const row = document.getElementById('tr_' + instance_id);
+                if (row) {
+                    row.style.transition = 'opacity 0.3s ease';
+                    row.style.opacity = '0.5';
+                    setTimeout(() => row.remove(), 300);
+                }
+            }
+        } else {
+            alert('Error: ' + (data.message || 'Failed to stop container'));
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        alert('Error: Failed to communicate with server');
     });
-
-    $(confirm).click(function() {
-        args.success();
-    });
-
-    obj.modal("show");
-
-    return obj;
 }
 
-function ezal(args) {
-    var res = modal.format(args.title, args.body);
-    var obj = $(res);
-    var button = '<button type="button" class="btn btn-primary" data-dismiss="modal">{0}</button>'.format(
-        args.button
-    );
+// Auto-refresh functionality
+let autoRefreshInterval;
 
-    obj.find(".modal-footer").append(button);
-    $("main").append(obj);
-
-    obj.modal("show");
-
-    $(obj).on("hidden.bs.modal", function(e) {
-        $(this).modal("dispose");
-    });
-
-    return obj;
+function startAutoRefresh() {
+    autoRefreshInterval = setInterval(() => {
+        location.reload();
+    }, 30000); // Refresh every 30 seconds
 }
+
+function stopAutoRefresh() {
+    if (autoRefreshInterval) {
+        clearInterval(autoRefreshInterval);
+    }
+}
+
+// Initialize auto-refresh on page load
+document.addEventListener('DOMContentLoaded', function() {
+    startAutoRefresh();
+    
+    // Stop auto-refresh when page is not visible
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) {
+            stopAutoRefresh();
+        } else {
+            startAutoRefresh();
+        }
+    });
+});
 </script>
 {% endblock scripts %}

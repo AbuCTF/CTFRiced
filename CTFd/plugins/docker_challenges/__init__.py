@@ -520,19 +520,48 @@ def get_best_server_for_image(image_name):
         # Get all active servers
         servers = DockerConfig.query.filter_by(is_active=True).all()
         
+        if not servers:
+            print(f"No active Docker servers configured")
+            return None
+        
+        # First pass: try to find a server that has the image
         for server in servers:
             try:
-                # Check if server has the image
-                repositories = get_repositories(server, tags=True)
-                if image_name in repositories:
-                    # Check if server is healthy
-                    is_healthy, _ = check_server_health(server)
-                    if is_healthy:
+                # Check if server is healthy first
+                is_healthy, health_msg = check_server_health(server)
+                if not is_healthy:
+                    print(f"Server {server.name} is unhealthy: {health_msg}")
+                    continue
+                
+                # Try to check if server has the image
+                try:
+                    repositories = get_repositories(server, tags=True)
+                    if image_name in repositories:
+                        print(f"Found image {image_name} on server {server.name}")
                         return server
+                    else:
+                        print(f"Image {image_name} not found on server {server.name}")
+                except Exception as repo_e:
+                    print(f"Could not get repository list from {server.name}: {str(repo_e)}")
+                    # Don't skip this server - it might still be usable for pulling
+                    
             except Exception as e:
                 print(f"Error checking server {server.name}: {str(e)}")
                 continue
         
+        # Second pass: if no server has the image, return the first healthy server
+        # This allows Docker to auto-pull the image
+        for server in servers:
+            try:
+                is_healthy, health_msg = check_server_health(server)
+                if is_healthy:
+                    print(f"No server has image {image_name}, returning healthy server {server.name} for auto-pull")
+                    return server
+            except Exception as e:
+                print(f"Error checking server health for {server.name}: {str(e)}")
+                continue
+        
+        print(f"No healthy servers found for image {image_name}")
         return None
     except Exception as e:
         print(f"Error finding best server: {str(e)}")
@@ -1101,16 +1130,16 @@ class ContainerAPI(Resource):
             if not docker:
                 return abort(500, f"No available Docker server found for image: {container}")
             
-            # Check if container exists in repository
+            # Check if container exists in repository (skip if we can't get repo list)
             try:
                 repositories = get_repositories(docker, tags=True)
                 if container not in repositories:
-                    return abort(403, f"Container {container} not present in the repository on server {docker.name}.")
+                    print(f"Container {container} not found in repository list, will attempt to pull")
+                    # Don't abort here - let Docker try to pull the image
             except Exception as e:
-                print(f"Error getting repositories: {str(e)}")
-                import traceback
-                traceback.print_exc()
-                return abort(500, "Failed to get repository list")
+                print(f"Warning: Could not get repository list from server {docker.name}: {str(e)}")
+                print("Continuing anyway - Docker will attempt to pull image if needed")
+                # Don't abort here - continue with the container operation
             
             # Get current session
             try:

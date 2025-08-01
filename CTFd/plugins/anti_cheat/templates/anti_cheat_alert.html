@@ -1,0 +1,489 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<style>
+.anti-cheat-header {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    color: white;
+    padding: 2rem 0;
+    margin-bottom: 2rem;
+    border-bottom: 3px solid #3498db;
+}
+
+.anti-cheat-header h1 {
+    font-weight: 300;
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.anti-cheat-header p {
+    font-weight: 300;
+    opacity: 0.9;
+    font-size: 0.95rem;
+}
+
+.alert-detail-card {
+    background: white;
+    border-radius: 6px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    margin-bottom: 1.5rem;
+    border: 1px solid #e8e8e8;
+}
+
+.severity-critical { border-left: 3px solid #e74c3c; }
+.severity-high { border-left: 3px solid #f39c12; }
+.severity-medium { border-left: 3px solid #f1c40f; }
+.severity-low { border-left: 3px solid #3498db; }
+
+.badge-critical { background-color: #e74c3c; }
+.badge-high { background-color: #f39c12; }
+.badge-medium { background-color: #f1c40f; color: #2c3e50; }
+.badge-low { background-color: #3498db; }
+
+.evidence-card {
+    background: #f8f9fa;
+    border-radius: 4px;
+    padding: 1rem;
+    margin-top: 1rem;
+    border: 1px solid #e8e8e8;
+}
+
+.evidence-item {
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #e9ecef;
+    font-size: 0.9rem;
+}
+
+.evidence-item:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.json-view {
+    background: #2c3e50;
+    color: #ecf0f1;
+    padding: 1rem;
+    border-radius: 6px;
+    font-family: 'Monaco', 'Menlo', 'Ubuntu Mono', monospace;
+    font-size: 0.875rem;
+    overflow-x: auto;
+}
+
+.resolve-button {
+    background: #2c3e50;
+    border: none;
+    color: white;
+    padding: 0.75rem 1.5rem;
+    border-radius: 4px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    font-size: 0.9rem;
+}
+
+.resolve-button:hover {
+    background: #34495e;
+    color: white;
+}
+
+/* Toast Notifications */
+.toast-container {
+    position: fixed;
+    top: 20px;
+    right: 20px;
+    z-index: 9999;
+}
+
+.toast-notification {
+    background: white;
+    border-radius: 6px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+    padding: 1rem 1.5rem;
+    margin-bottom: 0.5rem;
+    min-width: 300px;
+    border-left: 4px solid;
+    opacity: 0;
+    transform: translateX(100%);
+    transition: all 0.3s ease;
+}
+
+.toast-notification.success {
+    border-left-color: #27ae60;
+}
+
+.toast-notification.error {
+    border-left-color: #e74c3c;
+}
+
+.toast-notification.show {
+    opacity: 1;
+    transform: translateX(0);
+}
+
+.toast-title {
+    font-weight: 600;
+    color: #2c3e50;
+    margin-bottom: 0.25rem;
+}
+
+.toast-message {
+    color: #7f8c8d;
+    font-size: 0.9rem;
+}
+</style>
+
+<div class="anti-cheat-header">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h1 class="mb-2">Alert Analysis</h1>
+                <p class="mb-0">Detailed security incident report #{{ alert.id }}</p>
+            </div>
+            <div class="col-md-4 text-md-right">
+                <a href="{{ url_for('anti_cheat.dashboard') }}" class="btn btn-light">
+                    ← Back to Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <div class="alert-detail-card severity-{{ alert.severity }}">
+        <div class="row">
+            <div class="col-md-8">
+                <div class="d-flex align-items-center mb-3">
+                    <span class="badge badge-{{ alert.severity }} me-3">{{ alert.severity|title }}</span>
+                    <span class="badge bg-secondary me-3">{{ alert.alert_type|replace('_', ' ')|title }}</span>
+                    <span class="badge bg-info">{{ alert.status|title }}</span>
+                </div>
+                
+                <h3 class="mb-3">{{ alert.description }}</h3>
+                
+                <div class="row mb-4">
+                    <div class="col-md-6">
+                        <strong>Alert ID:</strong> #{{ alert.id }}<br>
+                        <strong>Created:</strong> {{ alert.created_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}<br>
+                        {% if alert.resolved_at %}
+                        <strong>Resolved:</strong> {{ alert.resolved_at.strftime('%Y-%m-%d %H:%M:%S UTC') }}<br>
+                        {% endif %}
+                    </div>
+                    <div class="col-md-6">
+                        {% if alert.team %}
+                        <strong>Team:</strong> {{ alert.team.name }}<br>
+                        {% endif %}
+                        {% if alert.user %}
+                        <strong>User:</strong> {{ alert.user.name }}<br>
+                        {% endif %}
+                        {% if alert.challenge %}
+                        <strong>Challenge:</strong> {{ alert.challenge.name }}<br>
+                        {% endif %}
+                        {% if alert.ip_address %}
+                        <strong>IP Address:</strong> <code>{{ alert.ip_address }}</code><br>
+                        {% endif %}
+                    </div>
+                </div>
+            </div>
+            
+            <div class="col-md-4 text-end">
+                {% if alert.status == 'open' %}
+                <button class="resolve-button" onclick="resolveAlert()">
+                    Mark as Resolved
+                </button>
+                {% else %}
+                <div class="text-muted">
+                    Alert Resolved
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    {% if alert.evidence %}
+    <div class="row">
+        <!-- Evidence Analysis (Left Column) -->
+        <div class="col-lg-6">
+            <div class="alert-detail-card">
+                <h4 class="mb-3">Evidence Analysis</h4>
+                
+                <div class="evidence-card">
+                    {% if alert.alert_type == 'duplicate_flag' %}
+                        <div class="evidence-item">
+                            <strong>Full Flag Content:</strong> 
+                            <div class="mt-2">
+                                {% if alert.evidence and alert.evidence.full_flag_content %}
+                                <code style="word-break: break-all; padding: 12px; background: #f8f9fa; border-radius: 6px; display: block; font-family: 'Monaco', 'Menlo', 'Courier New', monospace; font-size: 0.9rem; color: #e74c3c; border: 1px solid #e9ecef;">{{ alert.evidence.full_flag_content }}</code>
+                                {% elif alert.evidence and alert.evidence.get('full_flag_content') %}
+                                <code style="word-break: break-all; padding: 12px; background: #f8f9fa; border-radius: 6px; display: block; font-family: 'Monaco', 'Menlo', 'Courier New', monospace; font-size: 0.9rem; color: #e74c3c; border: 1px solid #e9ecef;">{{ alert.evidence.get('full_flag_content') }}</code>
+                                {% else %}
+                                <div class="alert alert-warning">
+                                    <i class="fas fa-exclamation-triangle me-2"></i>
+                                    Flag content not available - this may be an older alert format
+                                </div>
+                                {% endif %}
+                            </div>
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Flag Hash:</strong> <code>{{ alert.evidence.flag_content_hash }}</code>
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Teams Involved:</strong> {{ alert.evidence.participant_count }} teams
+                            <div class="mt-2">
+                                <small class="text-muted">Team IDs: {{ alert.evidence.team_ids|join(', ') }}</small>
+                            </div>
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Challenge:</strong> {{ alert.evidence.challenge_name }}
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Submission Timeline:</strong>
+                            <ul class="mt-2">
+                                {% for timestamp in alert.evidence.submission_times %}
+                                <li><code>{{ timestamp }}</code></li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                    
+                    {% elif alert.alert_type == 'brute_force' %}
+                        <div class="evidence-item">
+                            <strong>Attempt Count:</strong> {{ alert.evidence.attempt_count }} attempts
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Time Window:</strong> {{ alert.evidence.time_window }} seconds
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Team:</strong> {{ alert.evidence.team_name }}
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Challenge:</strong> {{ alert.evidence.challenge_name }}
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Attack Period:</strong>
+                            <div class="mt-1">
+                                <small>First: <code>{{ alert.evidence.first_attempt }}</code></small><br>
+                                <small>Last: <code>{{ alert.evidence.last_attempt }}</code></small>
+                            </div>
+                        </div>
+                    
+                    {% elif alert.alert_type == 'ip_sharing' %}
+                        {% if alert.evidence.ip_count %}
+                        <div class="evidence-item">
+                            <strong>Team:</strong> {{ alert.evidence.team_name }}
+                        </div>
+                        <div class="evidence-item">
+                            <strong>IP Addresses Used:</strong> {{ alert.evidence.ip_count }}
+                            <div class="mt-2">
+                                {% for ip in alert.evidence.ip_addresses %}
+                                <code class="me-2">{{ ip }}</code>
+                                {% endfor %}
+                            </div>
+                        </div>
+                        {% else %}
+                        <div class="evidence-item">
+                            <strong>Shared IP:</strong> <code>{{ alert.evidence.ip_address }}</code>
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Teams Using IP:</strong> {{ alert.evidence.team_count }} teams
+                            <div class="mt-2">
+                                <small class="text-muted">Team IDs: {{ alert.evidence.team_ids|join(', ') }}</small>
+                            </div>
+                        </div>
+                        {% endif %}
+                        <div class="evidence-item">
+                            <strong>Detection Window:</strong> {{ alert.evidence.detection_window }}
+                        </div>
+                    
+                    {% elif alert.alert_type == 'sequence_match' %}
+                        <div class="evidence-item">
+                            <strong>Teams Involved:</strong>
+                            <div class="mt-1">
+                                <strong>Team 1:</strong> {{ alert.evidence.team1_name }} (ID: {{ alert.evidence.team1_id }})<br>
+                                <strong>Team 2:</strong> {{ alert.evidence.team2_name }} (ID: {{ alert.evidence.team2_id }})
+                            </div>
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Sequence Similarity:</strong> 
+                            <span class="badge bg-danger">{{ "%.1f"|format(alert.evidence.sequence_similarity * 100) }}%</span>
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Time Pattern Similarity:</strong> 
+                            <span class="badge bg-warning">{{ "%.1f"|format(alert.evidence.time_similarity * 100) }}%</span>
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Sequence Lengths:</strong>
+                            <div class="mt-1">
+                                <small>Team 1: {{ alert.evidence.sequence_length1 }} submissions</small><br>
+                                <small>Team 2: {{ alert.evidence.sequence_length2 }} submissions</small>
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+
+        <!-- Technical Evidence (Right Column) -->
+        <div class="col-lg-6">
+            <div class="alert-detail-card">
+                <h4 class="mb-3">Technical Evidence</h4>
+                
+                <div class="evidence-card">
+                    {% if alert.alert_type == 'duplicate_flag' %}
+                        <div class="evidence-item">
+                            <strong>Challenge Type:</strong> {{ alert.evidence.challenge_type|title }}
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Participants:</strong>
+                            <ul class="mt-2 mb-0">
+                                {% for name in alert.evidence.participant_names %}
+                                <li>{{ name }}</li>
+                                {% endfor %}
+                            </ul>
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Submission Count:</strong> {{ alert.evidence.participant_count }} identical submissions
+                        </div>
+                        <div class="evidence-item">
+                            <strong>Flag Analysis:</strong>
+                            <div class="mt-2">
+                                <div><strong>Length:</strong> {{ alert.evidence.get('full_flag_content', '')|length }} characters</div>
+                                <div><strong>Format:</strong> {{ 'Standard CTF format' if alert.evidence.get('full_flag_content', '').startswith('CTF{') else 'Custom format' }}</div>
+                                <div><strong>Hash (SHA256):</strong> <code style="font-size: 0.8em;">{{ alert.evidence.flag_content_hash }}</code></div>
+                            </div>
+                        </div>
+                    {% else %}
+                        <div class="evidence-item">
+                            <strong>Detection Data:</strong>
+                            <div class="mt-2">
+                                {% for key, value in alert.evidence.items() %}
+                                    {% if key not in ['team_ids', 'user_ids', 'evidence_hash'] %}
+                                    <div><strong>{{ key|replace('_', ' ')|title }}:</strong> 
+                                        {% if value is string %}
+                                            {{ value }}
+                                        {% elif value is number %}
+                                            {{ value }}
+                                        {% elif value is sequence %}
+                                            {{ value|join(', ') if value|length < 10 else (value[:5]|join(', ') + ' ... (+' + (value|length - 5)|string + ' more)') }}
+                                        {% else %}
+                                            {{ value }}
+                                        {% endif %}
+                                    </div>
+                                    {% endif %}
+                                {% endfor %}
+                            </div>
+                        </div>
+                    {% endif %}
+                </div>
+            </div>
+        </div>
+    </div>
+    {% endif %}
+
+    <div class="alert-detail-card">
+        <h4 class="mb-3">Recommended Actions</h4>
+        
+        {% if alert.alert_type == 'duplicate_flag' %}
+        <ul>
+            <li><strong>Investigate flag generation:</strong> Check if dynamic challenge flags are being properly randomized</li>
+            <li><strong>Review team submissions:</strong> Examine the submission logs for the involved teams</li>
+            <li><strong>Check for shared solutions:</strong> Look for evidence of teams sharing flags or solutions</li>
+            <li><strong>Consider flag regeneration:</strong> Regenerate flags for affected challenges if necessary</li>
+        </ul>
+        {% elif alert.alert_type == 'brute_force' %}
+        <ul>
+            <li><strong>Implement rate limiting:</strong> Consider adding submission rate limits for this team</li>
+            <li><strong>Review challenge difficulty:</strong> Check if the challenge is appropriately difficult</li>
+            <li><strong>Monitor continued behavior:</strong> Watch for repeated brute force attempts</li>
+            <li><strong>Consider temporary restrictions:</strong> Temporarily limit submission frequency</li>
+        </ul>
+        {% elif alert.alert_type == 'ip_sharing' %}
+        <ul>
+            <li><strong>Investigate team composition:</strong> Verify if team members are in the same location</li>
+            <li><strong>Check for VPN usage:</strong> Consider if teams are using VPNs or shared networks</li>
+            <li><strong>Review registration details:</strong> Cross-reference with team registration information</li>
+            <li><strong>Consider contact verification:</strong> Reach out to teams for clarification</li>
+        </ul>
+        {% elif alert.alert_type == 'sequence_match' %}
+        <ul>
+            <li><strong>Deep dive analysis:</strong> Manually review both teams' submission patterns</li>
+            <li><strong>Check submission timing:</strong> Look for synchronized solving behavior</li>
+            <li><strong>Review write-ups:</strong> Compare any published write-ups or solutions</li>
+            <li><strong>Consider team interview:</strong> Contact teams to discuss their solving approach</li>
+        </ul>
+        {% endif %}
+    </div>
+</div>
+
+<div class="toast-container" id="toastContainer"></div>
+
+<script>
+function showToast(type, title, message) {
+    const container = document.getElementById('toastContainer');
+    const toastId = 'toast-' + Date.now();
+    
+    const toast = document.createElement('div');
+    toast.id = toastId;
+    toast.className = `toast-notification ${type}`;
+    toast.innerHTML = `
+        <div class="toast-title">${title}</div>
+        <div class="toast-message">${message}</div>
+    `;
+    
+    container.appendChild(toast);
+    
+    setTimeout(() => {
+        toast.classList.add('show');
+    }, 10);
+    
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 5000);
+}
+
+function resolveAlert() {
+    if (!confirm('Are you sure you want to mark this alert as resolved?')) {
+        return;
+    }
+    
+    const button = document.querySelector('.resolve-button');
+    const originalText = button.innerHTML;
+    
+    button.innerHTML = '<i class="fas fa-spinner fa-spin me-2"></i>Resolving...';
+    button.disabled = true;
+    
+    fetch(`/admin/anti_cheat/alert/{{ alert.id }}/resolve`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/x-www-form-urlencoded',
+        },
+        body: 'nonce={{ Session.nonce }}&status=resolved'
+    })
+    .then(response => {
+        if (!response.ok) {
+            throw new Error('HTTP ' + response.status);
+        }
+        return response.json();
+    })
+    .then(data => {
+        if (data.success) {
+            showToast('success', 'Alert Resolved', data.message || 'Alert has been marked as resolved');
+            setTimeout(() => {
+                window.location.href = '{{ url_for("anti_cheat.dashboard") }}';
+            }, 1500);
+        } else {
+            showToast('error', 'Resolution Failed', data.error || 'Failed to resolve alert');
+            button.innerHTML = originalText;
+            button.disabled = false;
+        }
+    })
+    .catch(error => {
+        console.error('Resolve error:', error);
+        showToast('error', 'Resolution Failed', 'Network error: ' + error.message);
+        button.innerHTML = originalText;
+        button.disabled = false;
+    });
+}
+</script>
+{% endblock %}

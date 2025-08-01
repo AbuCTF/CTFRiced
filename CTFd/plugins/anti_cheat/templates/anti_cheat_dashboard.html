@@ -1,0 +1,786 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<style>
+.anti-cheat-header {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    color: white;
+    padding: 2rem 0;
+    margin-bottom: 2rem;
+    border-bottom: 3px solid #3498db;
+}
+
+.anti-cheat-header h1 {
+    font-weight: 300;
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+
+.anti-cheat-header p {
+    font-weight: 300;
+    opacity: 0.9;
+    font-size: 0.95rem;
+}
+
+.status-cards {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+    gap: 1.5rem;
+    margin-bottom: 2rem;
+}
+
+.status-card {
+    background: white;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    overflow: hidden;
+    transition: all 0.2s ease;
+    border: 1px solid #e8e8e8;
+}
+
+.status-card:hover {
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    transform: translateY(-1px);
+}
+
+.status-card-header {
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #f0f0f0;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background: #fafafa;
+}
+
+.status-card-header h5 {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: #2c3e50;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    margin: 0;
+}
+
+.status-card-body {
+    padding: 1.5rem 1.25rem;
+    text-align: center;
+}
+
+.metric-value {
+    font-size: 2.25rem;
+    font-weight: 200;
+    color: #2c3e50;
+    margin: 0;
+    line-height: 1;
+}
+
+.metric-label {
+    font-size: 0.8rem;
+    color: #7f8c8d;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    font-weight: 500;
+    margin-top: 0.5rem;
+}
+
+.status-indicator {
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    margin-left: auto;
+}
+
+.status-indicator.success {
+    background: #27ae60;
+}
+
+.status-indicator.danger {
+    background: #e74c3c;
+}
+
+.status-indicator.warning {
+    background: #f39c12;
+}
+
+.btn-light {
+    background: rgba(255,255,255,0.15);
+    border: 1px solid rgba(255,255,255,0.25);
+    color: white;
+    font-weight: 400;
+    padding: 0.5rem 1rem;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.btn-light:hover {
+    background: rgba(255,255,255,0.25);
+    border-color: rgba(255,255,255,0.4);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.header-actions {
+    display: flex;
+    flex-direction: column;
+    align-items: flex-end;
+    gap: 1rem;
+}
+
+.primary-action .btn {
+    padding: 0.75rem 1.5rem;
+    font-weight: 500;
+}
+
+.secondary-actions {
+    display: flex;
+    gap: 0.75rem;
+}
+
+.secondary-actions .btn {
+    padding: 0.5rem 1rem;
+    font-size: 0.9rem;
+}
+
+.alerts-table {
+    background: white;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    overflow: hidden;
+    margin-top: 2rem;
+    border: 1px solid #e8e8e8;
+}
+
+.alerts-table-header {
+    background: #f8f9fa;
+    padding: 1rem 1.25rem;
+    border-bottom: 1px solid #e8e8e8;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.alerts-table-header h4 {
+    font-size: 1rem;
+    font-weight: 500;
+    color: #2c3e50;
+    margin: 0;
+}
+
+.table-elegant {
+    margin: 0;
+    font-size: 0.9rem;
+}
+
+.table-elegant thead th {
+    border-top: none;
+    border-bottom: 1px solid #e8e8e8;
+    font-weight: 500;
+    color: #2c3e50;
+    background: #f8f9fa;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    padding: 0.75rem 1rem;
+}
+
+.table-elegant tbody tr {
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.table-elegant tbody tr:hover {
+    background: #f9f9f9;
+}
+
+.table-elegant td {
+    border: none;
+    vertical-align: middle;
+    padding: 0.875rem 1rem;
+    color: #2c3e50;
+}
+
+.alert-type-badge {
+    padding: 0.25rem 0.5rem;
+    border-radius: 3px;
+    font-size: 0.7rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border: 1px solid;
+}
+
+.alert-type-badge.duplicate_flag {
+    background: #fff5f5;
+    color: #c53030;
+    border-color: #feb2b2;
+}
+
+.alert-type-badge.brute_force {
+    background: #fff5f5;
+    color: #c53030;
+    border-color: #feb2b2;
+}
+
+.alert-type-badge.ip_sharing {
+    background: #fffaf0;
+    color: #c05621;
+    border-color: #fbd38d;
+}
+
+.alert-type-badge.sequence_match {
+    background: #ebf8ff;
+    color: #2b6cb0;
+    border-color: #90cdf4;
+}
+
+.action-btn {
+    padding: 0.25rem 0.75rem;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    margin: 0 0.125rem;
+    border: 1px solid;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+    display: inline-block;
+}
+
+.action-btn.view {
+    background: #f7fafc;
+    color: #2d3748;
+    border-color: #e2e8f0;
+}
+
+.action-btn.view:hover {
+    background: #edf2f7;
+    color: #1a202c;
+    text-decoration: none;
+}
+
+.action-btn.resolve {
+    background: #f0fff4;
+    color: #276749;
+    border-color: #9ae6b4;
+}
+
+.action-btn.resolve:hover {
+    background: #c6f6d5;
+    color: #22543d;
+}
+
+.action-btn.delete {
+    background: #fff5f5;
+    color: #c53030;
+    border-color: #feb2b2;
+}
+
+.action-btn.delete:hover {
+    background: #fed7d7;
+    color: #9b2c2c;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem;
+    color: #7f8c8d;
+}
+
+.empty-state h4 {
+    font-weight: 300;
+    color: #2c3e50;
+    margin-bottom: 0.5rem;
+}
+
+.badge {
+    font-size: 0.75rem;
+    font-weight: 400;
+    padding: 0.375rem 0.75rem;
+    border-radius: 3px;
+}
+
+/* Alert Filters */
+.alert-filters {
+    background: white;
+    border-radius: 8px;
+    padding: 1.5rem;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    border: 1px solid #e8e8e8;
+}
+
+.filter-buttons {
+    display: flex;
+    gap: 1rem;
+}
+
+.filter-btn {
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+    color: #6c757d;
+    padding: 0.75rem 1.25rem;
+    border-radius: 6px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    display: flex;
+    align-items: center;
+    cursor: pointer;
+    font-size: 0.9rem;
+    gap: 0.5rem;
+}
+
+.filter-btn:hover {
+    background: #e9ecef;
+    border-color: #dee2e6;
+    color: #495057;
+}
+
+.filter-btn.active {
+    background: #2c3e50;
+    border-color: #2c3e50;
+    color: white;
+}
+
+.filter-btn.active:hover {
+    background: #34495e;
+    border-color: #34495e;
+}
+
+.filter-btn .badge {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.25rem 0.5rem;
+    border-radius: 12px;
+    min-width: 1.5rem;
+    text-align: center;
+    line-height: 1.2;
+}
+
+.filter-btn:not(.active) .badge {
+    background-color: #6c757d !important;
+    color: white;
+}
+
+.filter-btn.active .badge {
+    background-color: rgba(255, 255, 255, 0.2) !important;
+    color: white;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+}
+
+.severity-filters {
+    display: flex;
+    gap: 1.5rem;
+    align-items: center;
+}
+
+.severity-filter-label {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.9rem;
+    color: #6c757d;
+    cursor: pointer;
+    margin: 0;
+}
+
+.severity-filter {
+    margin: 0;
+}
+
+/* Alert Row States */
+.alert-row {
+    transition: opacity 0.3s ease;
+}
+
+.alert-row.hidden {
+    display: none;
+}
+
+.alert-row[data-status="resolved"] {
+    opacity: 0.6;
+    background: #f8f9fa;
+}
+
+.alert-row[data-status="resolved"] .badge {
+    opacity: 0.7;
+}
+</style>
+
+<div class="anti-cheat-header">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h1 class="mb-2">Security Monitoring</h1>
+                <p class="mb-0">Advanced threat detection and competition integrity monitoring</p>
+            </div>
+            <div class="col-md-4 text-md-right">
+                <div class="header-actions">
+                    <div class="primary-action mb-3">
+                        <a href="{{ url_for('anti_cheat.config') }}" class="btn btn-light btn-lg">
+                            <i class="fas fa-cog me-2"></i>Configure System
+                        </a>
+                    </div>
+                    <div class="secondary-actions d-flex gap-3">
+                        <button onclick="manualCleanup()" class="btn btn-warning">
+                            <i class="fas fa-broom me-2"></i>Clean Duplicates
+                        </button>
+                        <button onclick="runScan()" class="btn btn-light">
+                            <i class="fas fa-search me-2"></i>Scan Now
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <!-- Status Cards -->
+    <div class="status-cards">
+        <div class="status-card">
+            <div class="status-card-header">
+                <div>
+                    <h5 class="mb-0">Total Alerts</h5>
+                </div>
+                <div class="status-indicator {{ 'danger' if stats.total_alerts > 0 else 'success' }}"></div>
+            </div>
+            <div class="status-card-body">
+                <div class="metric-value">{{ stats.total_alerts }}</div>
+                <div class="metric-label">All Time</div>
+            </div>
+        </div>
+
+        <div class="status-card">
+            <div class="status-card-header">
+                <div>
+                    <h5 class="mb-0">Active Alerts</h5>
+                </div>
+                <div class="status-indicator {{ 'danger' if stats.open_alerts > 0 else 'success' }}"></div>
+            </div>
+            <div class="status-card-body">
+                <div class="metric-value">{{ stats.open_alerts }}</div>
+                <div class="metric-label">Unresolved</div>
+            </div>
+        </div>
+
+        <div class="status-card">
+            <div class="status-card-header">
+                <div>
+                    <h5 class="mb-0">Critical Alerts</h5>
+                </div>
+                <div class="status-indicator {{ 'danger' if stats.critical_alerts > 0 else 'success' }}"></div>
+            </div>
+            <div class="status-card-body">
+                <div class="metric-value">{{ stats.critical_alerts }}</div>
+                <div class="metric-label">High Priority</div>
+            </div>
+        </div>
+
+        <div class="status-card">
+            <div class="status-card-header">
+                <div>
+                    <h5 class="mb-0">Today's Activity</h5>
+                </div>
+                <div class="status-indicator {{ 'warning' if stats.alerts_today > 0 else 'success' }}"></div>
+            </div>
+            <div class="status-card-body">
+                <div class="metric-value">{{ stats.alerts_today }}</div>
+                <div class="metric-label">Recent</div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alert Filters -->
+    <div class="alert-filters mb-4">
+        <div class="d-flex align-items-center justify-content-between">
+            <div class="filter-buttons">
+                <button class="filter-btn active" data-filter="active" onclick="filterAlerts('active')">
+                    <i class="fas fa-exclamation-triangle"></i>
+                    <span>Active Issues</span>
+                    <span class="badge bg-danger">{{ stats.open_alerts }}</span>
+                </button>
+                <button class="filter-btn" data-filter="resolved" onclick="filterAlerts('resolved')">
+                    <i class="fas fa-check-circle"></i>
+                    <span>Resolved Issues</span>
+                    <span class="badge bg-success">{{ stats.total_alerts - stats.open_alerts }}</span>
+                </button>
+                <button class="filter-btn" data-filter="all" onclick="filterAlerts('all')">
+                    <i class="fas fa-list"></i>
+                    <span>All Issues</span>
+                    <span class="badge bg-secondary">{{ stats.total_alerts }}</span>
+                </button>
+            </div>
+            <div class="severity-filters">
+                <label class="severity-filter-label">
+                    <input type="checkbox" class="severity-filter" value="critical" checked> Critical
+                </label>
+                <label class="severity-filter-label">
+                    <input type="checkbox" class="severity-filter" value="high" checked> High
+                </label>
+                <label class="severity-filter-label">
+                    <input type="checkbox" class="severity-filter" value="medium" checked> Medium
+                </label>
+                <label class="severity-filter-label">
+                    <input type="checkbox" class="severity-filter" value="low" checked> Low
+                </label>
+            </div>
+        </div>
+    </div>
+
+    <!-- Alerts Table -->
+    {% if alerts %}
+    <div class="alerts-table">
+        <div class="alerts-table-header">
+            <h4 class="mb-0">Security Alerts</h4>
+            <span class="badge bg-secondary" id="alertCount">{{ alerts|length }} items</span>
+        </div>
+        <table class="table table-elegant">
+            <thead>
+                <tr>
+                    <th>Type</th>
+                    <th>Description</th>
+                    <th>Severity</th>
+                    <th>Time</th>
+                    <th>Actions</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for alert in alerts %}
+                <tr class="alert-row" data-status="{{ alert.status }}" data-severity="{{ alert.severity }}" data-type="{{ alert.alert_type }}">
+                    <td>
+                        <span class="alert-type-badge {{ alert.alert_type }}">
+                            {% if alert.alert_type == 'duplicate_flag' %}
+                                Duplicate Flag
+                            {% elif alert.alert_type == 'brute_force' %}
+                                Brute Force
+                            {% elif alert.alert_type == 'ip_sharing' %}
+                                IP Sharing
+                            {% elif alert.alert_type == 'sequence_match' %}
+                                Sequence Match
+                            {% endif %}
+                        </span>
+                    </td>
+                    <td>{{ alert.description }}</td>
+                    <td>
+                        <span class="badge bg-{{ 'danger' if alert.severity in ['high', 'critical'] else 'warning' if alert.severity == 'medium' else 'success' }}">
+                            {{ alert.severity.title() }}
+                        </span>
+                    </td>
+                    <td>
+                        <small class="text-muted">{{ alert.created_at.strftime('%H:%M') }}</small>
+                        {% if alert.status == 'resolved' %}
+                        <br><small class="text-success">✓ Resolved</small>
+                        {% endif %}
+                    </td>
+                    <td>
+                        <a href="{{ url_for('anti_cheat.view_alert', alert_id=alert.id) }}" class="action-btn view">
+                            <i class="fas fa-eye me-1"></i>View
+                        </a>
+                        {% if alert.status == 'open' %}
+                        <button class="action-btn resolve" onclick="resolveDashboardAlert({{ alert.id }})">
+                            <i class="fas fa-check me-1"></i>Resolve
+                        </button>
+                        {% else %}
+                        <button class="action-btn delete" onclick="deleteResolvedAlert({{ alert.id }})" title="Delete this resolved alert">
+                            <i class="fas fa-trash me-1"></i>Delete
+                        </button>
+                        {% endif %}
+                    </td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% else %}
+    <div class="alerts-table">
+        <div class="empty-state">
+            <h4>No Active Alerts</h4>
+            <p class="mb-0">System monitoring active. No security incidents detected.</p>
+        </div>
+    </div>
+    {% endif %}
+</div>
+
+{% endblock %}
+
+{% block scripts %}
+    {{ super() }}
+    <script>
+        window.nonce = '{{ Session.nonce }}';
+        
+        // Modern alert filtering system
+        let currentFilter = 'active';
+
+        function filterAlerts(filterType) {
+            currentFilter = filterType;
+            
+            // Update active button
+            document.querySelectorAll('.filter-btn').forEach(btn => {
+                btn.classList.remove('active');
+                if (btn.dataset.filter === filterType) {
+                    btn.classList.add('active');
+                }
+            });
+            
+            // Filter alerts
+            const alertRows = document.querySelectorAll('.alert-row');
+            let visibleCount = 0;
+            
+            alertRows.forEach(row => {
+                const status = row.dataset.status;
+                const severity = row.dataset.severity;
+                
+                let showByStatus = false;
+                if (filterType === 'active' && status === 'open') showByStatus = true;
+                if (filterType === 'resolved' && status === 'resolved') showByStatus = true;
+                if (filterType === 'all') showByStatus = true;
+                
+                let showBySeverity = document.querySelector(`.severity-filter[value="${severity}"]`)?.checked || false;
+                
+                if (showByStatus && showBySeverity) {
+                    row.classList.remove('hidden');
+                    visibleCount++;
+                } else {
+                    row.classList.add('hidden');
+                }
+            });
+            
+            // Update count
+            document.getElementById('alertCount').textContent = `${visibleCount} items`;
+        }
+
+        // Dashboard-specific resolve function
+        function resolveDashboardAlert(alertId) {
+            if (!confirm('Are you sure you want to mark this alert as resolved?')) {
+                return;
+            }
+            
+            const button = document.querySelector(`button[onclick="resolveDashboardAlert(${alertId})"]`);
+            const originalText = button.innerHTML;
+            
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            button.disabled = true;
+            
+            fetch(`/admin/anti_cheat/alert/${alertId}/resolve`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `nonce={{ Session.nonce }}&status=resolved`
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    if (window.antiCheatDashboard) {
+                        window.antiCheatDashboard.showToast('success', 'Alert Resolved', data.message || 'Alert resolved successfully');
+                    }
+                    
+                    // Update the row to show as resolved
+                    const row = button.closest('.alert-row');
+                    row.dataset.status = 'resolved';
+                    
+                    // Replace button with resolved text
+                    button.parentElement.innerHTML = '<span class="text-muted">Resolved</span>';
+                    
+                    // Add resolved indicator
+                    const timeCell = row.querySelector('td:nth-child(4)');
+                    timeCell.innerHTML += '<br><small class="text-success">✓ Resolved</small>';
+                    
+                    // Re-apply current filter
+                    setTimeout(() => filterAlerts(currentFilter), 100);
+                    
+                } else {
+                    if (window.antiCheatDashboard) {
+                        window.antiCheatDashboard.showToast('error', 'Resolution Failed', data.error || 'Failed to resolve alert');
+                    }
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Resolve error:', error);
+                if (window.antiCheatDashboard) {
+                    window.antiCheatDashboard.showToast('error', 'Resolution Failed', 'Network error: ' + error.message);
+                }
+                button.innerHTML = originalText;
+                button.disabled = false;
+            });
+        }
+
+        // Delete resolved alert function
+        function deleteResolvedAlert(alertId) {
+            if (!confirm('Are you sure you want to permanently delete this resolved alert? This action cannot be undone.')) {
+                return;
+            }
+            
+            const button = document.querySelector(`button[onclick="deleteResolvedAlert(${alertId})"]`);
+            const originalText = button.innerHTML;
+            
+            button.innerHTML = '<i class="fas fa-spinner fa-spin"></i>';
+            button.disabled = true;
+            
+            fetch(`/admin/anti_cheat/alert/${alertId}/delete`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded',
+                },
+                body: `nonce={{ Session.nonce }}`
+            })
+            .then(response => {
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+                return response.json();
+            })
+            .then(data => {
+                if (data.success) {
+                    if (window.antiCheatDashboard) {
+                        window.antiCheatDashboard.showToast('success', 'Alert Deleted', data.message || 'Alert deleted successfully');
+                    }
+                    
+                    // Remove the row from the table
+                    const row = button.closest('.alert-row');
+                    row.style.transition = 'opacity 0.3s ease';
+                    row.style.opacity = '0';
+                    
+                    setTimeout(() => {
+                        row.remove();
+                        // Re-apply current filter to update counts
+                        filterAlerts(currentFilter);
+                    }, 300);
+                    
+                } else {
+                    if (window.antiCheatDashboard) {
+                        window.antiCheatDashboard.showToast('error', 'Delete Failed', data.error || 'Failed to delete alert');
+                    }
+                    button.innerHTML = originalText;
+                    button.disabled = false;
+                }
+            })
+            .catch(error => {
+                console.error('Delete error:', error);
+                if (window.antiCheatDashboard) {
+                    window.antiCheatDashboard.showToast('error', 'Delete Failed', 'Network error: ' + error.message);
+                }
+                button.innerHTML = originalText;
+                button.disabled = false;
+            });
+        }
+
+        // Initialize severity filters
+        document.addEventListener('DOMContentLoaded', function() {
+            // Set up severity filter change handlers
+            document.querySelectorAll('.severity-filter').forEach(checkbox => {
+                checkbox.addEventListener('change', function() {
+                    filterAlerts(currentFilter);
+                });
+            });
+            
+            // Initialize with active filter
+            filterAlerts('active');
+        });
+    </script>
+    <script src="{{ url_for('anti_cheat.static', filename='anti_cheat.js') }}"></script>
+{% endblock %}

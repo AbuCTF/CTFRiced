@@ -1,0 +1,451 @@
+{% extends "admin/base.html" %}
+
+{% block content %}
+<style>
+.security-header {
+    background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%);
+    color: #f5f5f5;
+    padding: 3rem 0;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid #333;
+}
+
+.security-header h1 {
+    font-weight: 200;
+    font-size: 2.5rem;
+    margin-bottom: 0.5rem;
+    letter-spacing: -0.5px;
+}
+
+.security-header p {
+    font-weight: 300;
+    opacity: 0.8;
+    font-size: 1rem;
+    margin-bottom: 0;
+}
+
+.config-section {
+    background: #ffffff;
+    border: 1px solid #e0e0e0;
+    border-radius: 2px;
+    margin-bottom: 2rem;
+    overflow: hidden;
+}
+
+.section-header {
+    background: #f8f8f8;
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid #e0e0e0;
+    margin: 0;
+    color: #333;
+    font-weight: 400;
+    font-size: 1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.section-content {
+    padding: 2rem 1.5rem;
+}
+
+.parameter-group {
+    margin-bottom: 2rem;
+    padding-bottom: 1.5rem;
+    border-bottom: 1px solid #f0f0f0;
+}
+
+.parameter-group:last-child {
+    border-bottom: none;
+    margin-bottom: 0;
+    padding-bottom: 0;
+}
+
+.parameter-label {
+    font-weight: 500;
+    color: #333;
+    margin-bottom: 0.5rem;
+    font-size: 0.9rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.parameter-description {
+    font-size: 0.85rem;
+    color: #666;
+    line-height: 1.4;
+    margin-bottom: 1rem;
+}
+
+.control-row {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+}
+
+.range-control {
+    flex: 1;
+    -webkit-appearance: none;
+    appearance: none;
+    height: 2px;
+    background: #ddd;
+    outline: none;
+    border: none;
+}
+
+.range-control::-webkit-slider-thumb {
+    -webkit-appearance: none;
+    appearance: none;
+    width: 16px;
+    height: 16px;
+    background: #333;
+    cursor: pointer;
+    border-radius: 50%;
+}
+
+.range-control::-moz-range-thumb {
+    width: 16px;
+    height: 16px;
+    background: #333;
+    cursor: pointer;
+    border-radius: 50%;
+    border: none;
+}
+
+.parameter-value {
+    background: #333;
+    color: white;
+    padding: 0.4rem 0.8rem;
+    font-family: 'Monaco', 'Menlo', monospace;
+    font-size: 0.8rem;
+    min-width: 60px;
+    text-align: center;
+    border-radius: 1px;
+}
+
+.toggle-group {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.toggle-switch {
+    position: relative;
+    width: 50px;
+    height: 24px;
+    background: #ddd;
+    border-radius: 12px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.toggle-switch.active {
+    background: #333;
+}
+
+.toggle-switch::after {
+    content: '';
+    position: absolute;
+    width: 20px;
+    height: 20px;
+    background: white;
+    border-radius: 50%;
+    top: 2px;
+    left: 2px;
+    transition: all 0.3s ease;
+}
+
+.toggle-switch.active::after {
+    left: 28px;
+}
+
+.toggle-label {
+    font-weight: 400;
+    color: #333;
+    font-size: 0.9rem;
+}
+
+.algorithm-info {
+    background: #f8f9fa;
+    padding: 1.5rem;
+    border-left: 3px solid #333;
+    margin-top: 1rem;
+}
+
+.algorithm-info h6 {
+    color: #333;
+    font-weight: 500;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.algorithm-info p {
+    font-size: 0.8rem;
+    color: #666;
+    line-height: 1.4;
+    margin-bottom: 0;
+}
+
+.save-controls {
+    background: #f8f8f8;
+    padding: 2rem;
+    text-align: center;
+    border-top: 1px solid #e0e0e0;
+    margin-top: 2rem;
+}
+
+.save-button {
+    background: #333;
+    border: none;
+    color: white;
+    padding: 1rem 2rem;
+    font-size: 0.9rem;
+    font-weight: 400;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    border-radius: 1px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.save-button:hover {
+    background: #000;
+    color: white;
+}
+
+.back-button {
+    background: transparent;
+    border: 1px solid rgba(255,255,255,0.3);
+    color: #f5f5f5;
+    padding: 0.75rem 1.5rem;
+    font-size: 0.85rem;
+    font-weight: 300;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    border-radius: 1px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    text-decoration: none;
+}
+
+.back-button:hover {
+    background: rgba(255,255,255,0.1);
+    color: #f5f5f5;
+    text-decoration: none;
+}
+</style>
+
+<div class="security-header">
+    <div class="container">
+        <div class="row align-items-center">
+            <div class="col-md-8">
+                <h1>Security Parameters</h1>
+                <p>Detection thresholds and monitoring configuration</p>
+            </div>
+            <div class="col-md-4 text-md-right">
+                <a href="{{ url_for('anti_cheat.dashboard') }}" class="back-button">
+                    ← Dashboard
+                </a>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="container">
+    <form method="POST">
+        <input type="hidden" name="nonce" value="{{ Session.nonce }}">
+        
+        <!-- Duplicate Flag Detection -->
+        <div class="config-section">
+            <h3 class="section-header">Duplicate Flag Detection</h3>
+            <div class="section-content">
+                <div class="parameter-group">
+                    <div class="parameter-label">Minimum Participant Threshold</div>
+                    <div class="parameter-description">
+                        Minimum number of teams required to trigger a duplicate flag alert. 
+                        For dynamic challenges, identical flags should never occur legitimately.
+                    </div>
+                    <div class="control-row">
+                        <input type="range" class="range-control" name="duplicate_flag_threshold" 
+                               min="1" max="5" value="{{ config.duplicate_flag_threshold }}"
+                               oninput="updateValue(this, 'duplicate-value')">
+                        <span class="parameter-value" id="duplicate-value">{{ config.duplicate_flag_threshold }}</span>
+                    </div>
+                </div>
+                <div class="algorithm-info">
+                    <h6>Detection Algorithm</h6>
+                    <p>Analyzes submitted flags for dynamic challenges. Groups submissions by flag content 
+                    and counts unique participants. Triggers when threshold is exceeded.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Brute Force Detection -->
+        <div class="config-section">
+            <h3 class="section-header">Brute Force Detection</h3>
+            <div class="section-content">
+                <div class="parameter-group">
+                    <div class="parameter-label">Attempt Threshold</div>
+                    <div class="parameter-description">
+                        Maximum number of submission attempts per challenge within the specified time window.
+                    </div>
+                    <div class="control-row">
+                        <input type="range" class="range-control" name="brute_force_threshold" 
+                               min="5" max="50" value="{{ config.brute_force_threshold }}"
+                               oninput="updateValue(this, 'brute-threshold-value')">
+                        <span class="parameter-value" id="brute-threshold-value">{{ config.brute_force_threshold }}</span>
+                    </div>
+                </div>
+                
+                <div class="parameter-group">
+                    <div class="parameter-label">Time Window (seconds)</div>
+                    <div class="parameter-description">
+                        Duration for counting brute force attempts. Shorter windows increase sensitivity.
+                    </div>
+                    <div class="control-row">
+                        <input type="range" class="range-control" name="brute_force_window" 
+                               min="30" max="600" value="{{ config.brute_force_window }}"
+                               oninput="updateValue(this, 'brute-window-value')">
+                        <span class="parameter-value" id="brute-window-value">{{ config.brute_force_window }}</span>
+                    </div>
+                </div>
+                
+                <div class="algorithm-info">
+                    <h6>Detection Algorithm</h6>
+                    <p>Monitors submission frequency per team per challenge. Uses sliding window 
+                    analysis to detect automated submission patterns.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- IP Analysis -->
+        <div class="config-section">
+            <h3 class="section-header">Network Analysis</h3>
+            <div class="section-content">
+                <div class="parameter-group">
+                    <div class="parameter-label">IP Sharing Threshold</div>
+                    <div class="parameter-description">
+                        Maximum number of teams permitted per IP address or maximum IPs per team.
+                    </div>
+                    <div class="control-row">
+                        <input type="range" class="range-control" name="ip_sharing_threshold" 
+                               min="2" max="10" value="{{ config.ip_sharing_threshold }}"
+                               oninput="updateValue(this, 'ip-value')">
+                        <span class="parameter-value" id="ip-value">{{ config.ip_sharing_threshold }}</span>
+                    </div>
+                </div>
+                
+                <div class="algorithm-info">
+                    <h6>Detection Algorithm</h6>
+                    <p>Bidirectional IP analysis. Detects multiple teams from single IP and 
+                    single teams from multiple IPs within 24-hour windows.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Sequence Analysis -->
+        <div class="config-section">
+            <h3 class="section-header">Behavioral Analysis</h3>
+            <div class="section-content">
+                <div class="parameter-group">
+                    <div class="parameter-label">Sequence Similarity Threshold</div>
+                    <div class="parameter-description">
+                        Minimum similarity percentage for flagging similar submission sequences between teams.
+                    </div>
+                    <div class="control-row">
+                        <input type="range" class="range-control" name="sequence_similarity_threshold" 
+                               min="0.5" max="1.0" step="0.05" value="{{ config.sequence_similarity_threshold }}"
+                               oninput="updateValue(this, 'sequence-value', true)">
+                        <span class="parameter-value" id="sequence-value">{{ "%.0f"|format(config.sequence_similarity_threshold * 100) }}%</span>
+                    </div>
+                </div>
+                
+                <div class="parameter-group">
+                    <div class="parameter-label">Time Delta Threshold (seconds)</div>
+                    <div class="parameter-description">
+                        Maximum acceptable time difference for similar submission timing patterns.
+                    </div>
+                    <div class="control-row">
+                        <input type="range" class="range-control" name="time_delta_threshold" 
+                               min="10" max="300" value="{{ config.time_delta_threshold }}"
+                               oninput="updateValue(this, 'time-delta-value')">
+                        <span class="parameter-value" id="time-delta-value">{{ config.time_delta_threshold }}</span>
+                    </div>
+                </div>
+                
+                <div class="algorithm-info">
+                    <h6>Detection Algorithm</h6>
+                    <p>Longest Common Subsequence (LCS) analysis combined with temporal pattern matching. 
+                    Identifies synchronized solving behavior and submission sequence similarities.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- System Behavior -->
+        <div class="config-section">
+            <h3 class="section-header">System Behavior</h3>
+            <div class="section-content">
+                <div class="parameter-group">
+                    <div class="parameter-label">Automated Response</div>
+                    <div class="parameter-description">
+                        Enable automatic team suspension when critical security violations are detected.
+                    </div>
+                    <div class="toggle-group">
+                        <div class="toggle-switch {{ 'active' if config.auto_ban_enabled }}" 
+                             onclick="toggleSwitch(this, 'auto_ban_enabled')"></div>
+                        <span class="toggle-label">Auto-ban Enabled</span>
+                        <input type="hidden" name="auto_ban_enabled" id="auto_ban_enabled" 
+                               value="{{ 'true' if config.auto_ban_enabled else 'false' }}">
+                    </div>
+                </div>
+                
+                <div class="parameter-group">
+                    <div class="parameter-label">Alert Notifications</div>
+                    <div class="parameter-description">
+                        Send real-time notifications when security alerts are generated.
+                    </div>
+                    <div class="toggle-group">
+                        <div class="toggle-switch {{ 'active' if config.notification_enabled }}" 
+                             onclick="toggleSwitch(this, 'notification_enabled')"></div>
+                        <span class="toggle-label">Notifications Enabled</span>
+                        <input type="hidden" name="notification_enabled" id="notification_enabled" 
+                               value="{{ 'true' if config.notification_enabled else 'false' }}">
+                    </div>
+                </div>
+            </div>
+        </div>
+        
+        <div class="save-controls">
+            <button type="submit" class="save-button">Save Configuration</button>
+        </div>
+    </form>
+</div>
+
+<script>
+function updateValue(input, valueId, isPercentage = false) {
+    const valueElement = document.getElementById(valueId);
+    if (isPercentage) {
+        valueElement.textContent = Math.round(input.value * 100) + '%';
+    } else {
+        valueElement.textContent = input.value;
+    }
+}
+
+function toggleSwitch(element, inputId) {
+    element.classList.toggle('active');
+    const input = document.getElementById(inputId);
+    input.value = element.classList.contains('active') ? 'true' : 'false';
+}
+
+// Initialize values on page load
+document.addEventListener('DOMContentLoaded', function() {
+    const ranges = document.querySelectorAll('input[type="range"]');
+    ranges.forEach(range => {
+        const valueId = range.getAttribute('oninput').match(/'([^']+)'/)[1];
+        const isPercentage = range.getAttribute('oninput').includes('true');
+        updateValue(range, valueId, isPercentage);
+    });
+});
+</script>
+{% endblock %}

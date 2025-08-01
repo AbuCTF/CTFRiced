@@ -1,0 +1,52 @@
+{
+    "name": "Anti-Cheat",
+    "route": "/admin/anti_cheat/",
+    "description": "Advanced anti-cheat detection system for CTF competitions. Detects duplicate flag submissions, brute force attempts, IP sharing, and submission sequence similarities using machine learning algorithms.",
+    "version": "1.0.0",
+    "author": "Abu",
+    "license": "MIT",
+    "requirements": [
+        "flask>=2.0.0",
+        "sqlalchemy>=1.4.0"
+    ],
+    "features": [
+        "Duplicate flag detection on dynamic challenges",
+        "Brute force attempt detection",
+        "IP sharing and account sharing detection", 
+        "Submission sequence analysis using Longest Common Subsequence",
+        "Time delta pattern analysis",
+        "Real-time alert system",
+        "Configurable detection thresholds",
+        "Comprehensive evidence collection",
+        "Admin dashboard with elegant UI"
+    ],
+    "detection_methods": {
+        "duplicate_flags": {
+            "description": "Detects when multiple teams submit identical flags on dynamic challenges",
+            "algorithm": "Statistical analysis of flag content hashes"
+        },
+        "brute_force": {
+            "description": "Identifies rapid flag submission attempts indicating automated attacks",
+            "algorithm": "Time-window based submission frequency analysis"
+        },
+        "ip_sharing": {
+            "description": "Detects account sharing by analyzing IP address patterns",
+            "algorithm": "Multi-IP usage pattern detection"
+        },
+        "sequence_similarity": {
+            "description": "Finds teams with suspiciously similar submission sequences",
+            "algorithm": "Longest Common Subsequence (LCS) with time delta analysis"
+        }
+    },
+    "endpoints": {
+        "dashboard": "/admin/anti_cheat/",
+        "check": "/admin/anti_cheat/check",
+        "config": "/admin/anti_cheat/config",
+        "alert_detail": "/admin/anti_cheat/alert/<id>",
+        "resolve_alert": "/admin/anti_cheat/alert/<id>/resolve"
+    },
+    "database_tables": [
+        "anti_cheat_config",
+        "anti_cheat_alerts"
+    ]
+}

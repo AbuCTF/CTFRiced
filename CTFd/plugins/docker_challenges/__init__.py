@@ -796,6 +796,56 @@ def get_client_cert(docker):
         return None, None
 
 
+def parse_environment_vars(env_vars_text):
+    """
+    Parse and validate environment variables from text format
+    
+    Args:
+        env_vars_text: String containing KEY=VALUE pairs, one per line
+        
+    Returns:
+        tuple: (list of valid env vars, list of validation errors)
+    """
+    env_vars = []
+    errors = []
+    
+    if not env_vars_text:
+        return env_vars, errors
+    
+    lines = env_vars_text.strip().split('\n')
+    for line_num, line in enumerate(lines, 1):
+        line = line.strip()
+        
+        # Skip empty lines and comments
+        if not line or line.startswith('#'):
+            continue
+        
+        # Validate format: KEY=VALUE
+        if '=' not in line:
+            errors.append(f"Line {line_num}: Missing '=' separator. Format should be KEY=VALUE")
+            continue
+        
+        key, _, value = line.partition('=')
+        key = key.strip()
+        value = value.strip()
+        
+        # Validate key format (alphanumeric and underscore only)
+        import re
+        if not re.match(r'^[A-Z][A-Z0-9_]*$', key):
+            errors.append(f"Line {line_num}: Invalid key '{key}'. Keys should be UPPERCASE and contain only letters, numbers, and underscores")
+            continue
+        
+        # Warn about potentially sensitive values (but still allow them)
+        if not value:
+            errors.append(f"Line {line_num}: Empty value for key '{key}'")
+            continue
+        
+        # Add the validated environment variable
+        env_vars.append(f"{key}={value}")
+    
+    return env_vars, errors
+
+
 # For the Docker Config Page. Gets the Current Repositories available on the Docker Server.
 def get_repositories(docker, tags=False, repos=False, group_compose=False, challenge_id=None):
     """
@@ -1142,6 +1192,21 @@ def create_container(docker, image, team, portbl, challenge_id=None):
             labels["ctf.challenge_id"] = str(challenge_id)
             labels["ctf.type"] = "single"
         
+        # Get environment variables from challenge if they exist
+        env_vars = []
+        if challenge_id:
+            try:
+                challenge = DockerChallenge.query.filter_by(id=challenge_id).first()
+                if challenge and challenge.environment_vars:
+                    # Parse and validate environment variables
+                    env_vars, errors = parse_environment_vars(challenge.environment_vars)
+                    if errors:
+                        current_app.logger.warning(f"Environment variable validation errors for challenge {challenge_id}: {', '.join(errors)}")
+                    if env_vars:
+                        current_app.logger.info(f"Loaded {len(env_vars)} environment variables for challenge {challenge_id}")
+            except Exception as e:
+                current_app.logger.warning(f"Error parsing environment variables for challenge {challenge_id}: {str(e)}")
+        
         headers = {'Content-Type': "application/json"}
         container_config = {
             "Image": image, 
@@ -1149,6 +1214,11 @@ def create_container(docker, image, team, portbl, challenge_id=None):
             "HostConfig": {"PortBindings": bindings},
             "Labels": labels
         }
+        
+        # Add environment variables if any
+        if env_vars:
+            container_config["Env"] = env_vars
+
         data = json.dumps(container_config)
         
         if tls:
@@ -1507,6 +1577,23 @@ def create_compose_stack(docker, images, team, challenge_id, primary_service=Non
                     "ctf.project_name": stack_id.split('_')[1] if '_' in stack_id else stack_id  # Extract challenge part
                 }
             }
+            
+            # Get environment variables from challenge if they exist
+            env_vars = []
+            if challenge_id:
+                try:
+                    challenge = DockerChallenge.query.filter_by(id=challenge_id).first()
+                    if challenge and challenge.environment_vars:
+                        # Parse and validate environment variables
+                        env_vars, errors = parse_environment_vars(challenge.environment_vars)
+                        if errors:
+                            current_app.logger.warning(f"Environment variable validation errors for challenge {challenge_id}: {', '.join(errors)}")
+                except Exception as e:
+                    current_app.logger.warning(f"Error parsing environment variables for challenge {challenge_id}: {str(e)}")
+            
+            # Add environment variables if any
+            if env_vars:
+                container_config["Env"] = env_vars
             
             # Create container
             create_response = do_request(docker, '/containers/create', 
@@ -1889,6 +1976,7 @@ class DockerChallengeType(BaseChallenge):
             'connection_type': getattr(challenge, 'connection_type', 'tcp'),
             'instance_duration': getattr(challenge, 'instance_duration', 15),
             'custom_subdomain': getattr(challenge, 'custom_subdomain', None),
+            'environment_vars': getattr(challenge, 'environment_vars', None),
             
             'type_data': {
                 'id': DockerChallengeType.id,
@@ -1955,7 +2043,7 @@ class DockerChallengeType(BaseChallenge):
             'name', 'category', 'description', 'value', 'state', 'max_attempts',
             # DockerChallenge specific fields (matching the model exactly)
             'docker_image', 'docker_config_id', 'challenge_type', 'docker_images', 
-            'primary_service', 'connection_type', 'instance_duration', 'custom_subdomain'
+            'primary_service', 'connection_type', 'instance_duration', 'custom_subdomain', 'environment_vars'
         }
         challenge_data = {k: v for k, v in data.items() if k in valid_fields}
         challenge_data['type'] = 'docker'  # Set the challenge polymorphic type
@@ -2094,6 +2182,7 @@ class DockerChallenge(Challenges):
     connection_type = db.Column("connection_type", db.String(32), default='tcp')  # 'tcp' or 'web'
     instance_duration = db.Column("instance_duration", db.Integer, default=15)  # Duration in minutes
     custom_subdomain = db.Column("custom_subdomain", db.String(128), nullable=True)  # Optional custom subdomain
+    environment_vars = db.Column("environment_vars", db.Text, nullable=True)  # Environment variables (KEY=VALUE format, one per line)
     
     # Relationship to get server info
     docker_config = db.relationship('DockerConfig')

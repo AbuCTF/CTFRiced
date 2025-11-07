@@ -34,7 +34,7 @@ UPDATE pages SET content = '<div style="display: flex; flex-direction: column; a
 ```
 - for database backups
 ```
-docker exec <repo>-db-1 mysqldump -u root -p ctfd > backup.sql
+docker exec ctfriced-db-1 mysqldump -u root -pctfd ctfd > backup.sql
 ```
 quick fun fact: `mysqldump`
  is the utility that generates SQL queries from a running database.

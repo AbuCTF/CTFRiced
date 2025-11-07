@@ -100,10 +100,10 @@
 <div class="form-group">
     <label for="environment_vars">Environment Variables (Optional):
         <i class="far fa-question-circle text-muted cursor-help" data-toggle="tooltip" data-placement="right" 
-           title="Environment variables to pass to the container. Format: KEY=VALUE (UPPERCASE keys), one per line. Example:&#10;GROQ_API_KEY=your_key&#10;SECRET_FLAG=flag_value&#10;FLASK_ENV=production"></i>
+           title="Pass environment variables to containers in KEY=VALUE format. Keys must be UPPERCASE. One variable per line."></i>
     </label>
     <textarea id="environment_vars" name="environment_vars" class="form-control" rows="6" 
-              placeholder="# Enter environment variables (KEY=VALUE format, UPPERCASE keys)&#10;GROQ_API_KEY=gsk_your_actual_api_key_here&#10;SECRET_FLAG=H7CTF{your_flag_here}&#10;RATE_LIMIT_SECONDS=5&#10;FLASK_ENV=production"></textarea>
+              placeholder="API_KEY=your_api_key_value&#10;SECRET_FLAG=flag_value&#10;DATABASE_URL=connection_string&#10;DEBUG_MODE=false"></textarea>
     <small class="form-text text-muted">
         <strong>Format:</strong> KEY=VALUE (one per line). Keys must be UPPERCASE. Lines starting with # are comments.
         These will be passed to all container instances for this challenge.

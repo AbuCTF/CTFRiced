@@ -16,18 +16,20 @@ branch_labels = None
 depends_on = None
 
 
-def upgrade():
+def upgrade(op=None):
     # Add environment_vars column to docker_challenge table
     try:
         op.add_column('docker_challenge', sa.Column('environment_vars', sa.Text(), nullable=True))
+        print("Added environment_vars column to docker_challenge table")
     except Exception as e:
         # Column might already exist, that's okay
         print(f"Note: Could not add environment_vars column (may already exist): {e}")
 
 
-def downgrade():
+def downgrade(op=None):
     # Remove environment_vars column
     try:
         op.drop_column('docker_challenge', 'environment_vars')
+        print("Removed environment_vars column from docker_challenge table")
     except Exception as e:
         print(f"Note: Could not remove environment_vars column: {e}")

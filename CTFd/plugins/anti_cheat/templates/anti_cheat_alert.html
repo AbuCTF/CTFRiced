@@ -172,13 +172,19 @@
                     </div>
                     <div class="col-md-6">
                         {% if alert.team %}
-                        <strong>Team:</strong> {{ alert.team.name }}<br>
+                        <strong>Team:</strong>
+                        <a href="/admin/teams/{{ alert.team_id }}" style="color: #3498db;">{{ alert.team.name }}</a><br>
                         {% endif %}
                         {% if alert.user %}
-                        <strong>User:</strong> {{ alert.user.name }}<br>
+                        <strong>User:</strong>
+                        <a href="/admin/users/{{ alert.user_id }}" style="color: #3498db;">{{ alert.user.name }}</a><br>
                         {% endif %}
                         {% if alert.challenge %}
-                        <strong>Challenge:</strong> {{ alert.challenge.name }}<br>
+                        <strong>Challenge:</strong>
+                        <a href="/admin/challenges/{{ alert.challenge_id }}" style="color: #3498db;">{{ alert.challenge.name }}</a>
+                        {% if solve_count is not none %}
+                        <small class="text-muted">({{ solve_count }} solve{{ 's' if solve_count != 1 else '' }})</small>
+                        {% endif %}<br>
                         {% endif %}
                         {% if alert.ip_address %}
                         <strong>IP Address:</strong> <code>{{ alert.ip_address }}</code><br>

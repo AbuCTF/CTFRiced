@@ -327,10 +327,18 @@
     {% if dockers %}
     <div class="containers-table">
         <div class="containers-table-header">
-            <h5 class="mb-0">Active Containers</h5>
-            <button type="button" class="btn btn-danger btn-sm" onclick="check_nuke_container(null, true)">
-                <i class="fas fa-bomb" style="margin-right: 0.4rem;"></i>Nuke All Containers
-            </button>
+            <h5 class="mb-0">
+                Active Containers
+                <span class="badge badge-secondary" style="font-size: 0.75rem; font-weight: 400; margin-left: 0.5rem; vertical-align: middle;">{{ dockers|length }}</span>
+            </h5>
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <button type="button" class="btn btn-outline-secondary btn-sm" id="refreshToggle" onclick="toggleAutoRefresh()" title="Pause auto-refresh">
+                    <i class="fas fa-sync-alt" id="refreshIcon"></i> <span id="refreshLabel">Auto</span>
+                </button>
+                <button type="button" class="btn btn-danger btn-sm" onclick="check_nuke_container(null, true)">
+                    <i class="fas fa-bomb" style="margin-right: 0.4rem;"></i>Nuke All
+                </button>
+            </div>
         </div>
         <div class="table-responsive">
             <table id='dockers' class="table table-elegant">
@@ -342,7 +350,8 @@
                         <th class="text-left">Docker Image</th>
                         <th class="text-left">Challenge</th>
                         <th class="text-left">Instance ID</th>
-                        <th class="text-left">Start Time</th>
+                        <th class="text-left">Started</th>
+                        <th class="text-left">Expires</th>
                         <th class="text-center">Actions</th>
                     </tr>
                 </thead>
@@ -365,6 +374,13 @@
                         <td class='text-left' style="white-space: nowrap;" value='{{docker.challenge}}'>{{docker.challenge}}</td>
                         <td class='text-left' value='{{docker.instance_id | truncate(15)}}'>{{docker.instance_id | truncate(15)}}</td>
                         <td class='text-left' style="white-space: nowrap;" value='{{docker.timestamp}}'>{{docker.timestamp | datetimeformat }}</td>
+                        <td class='text-left' style="white-space: nowrap;">
+                            {% if docker.revert_time %}
+                            <span class="expiry-countdown" data-expires="{{ docker.revert_time }}" style="font-family: 'Courier New', monospace; font-size: 0.85rem;"></span>
+                            {% else %}
+                            <span class="text-muted">—</span>
+                            {% endif %}
+                        </td>
                         <td class='text-center'>
                             <button class="btn btn-outline-danger action-btn" onclick="check_nuke_container('{{docker.instance_id}}', false)" title="Stop Container">
                                 <i class="fas fa-stop"></i>
@@ -443,33 +459,75 @@ function nuke_container(instance_id, nuke_all) {
     });
 }
 
-// Auto-refresh functionality
+// Auto-refresh
 let autoRefreshInterval;
+let autoRefreshEnabled = true;
 
 function startAutoRefresh() {
-    autoRefreshInterval = setInterval(() => {
-        location.reload();
-    }, 30000); // Refresh every 30 seconds
+    if (!autoRefreshEnabled) return;
+    autoRefreshInterval = setInterval(() => { location.reload(); }, 30000);
 }
 
 function stopAutoRefresh() {
-    if (autoRefreshInterval) {
-        clearInterval(autoRefreshInterval);
+    if (autoRefreshInterval) clearInterval(autoRefreshInterval);
+}
+
+function toggleAutoRefresh() {
+    autoRefreshEnabled = !autoRefreshEnabled;
+    const btn = document.getElementById('refreshToggle');
+    const icon = document.getElementById('refreshIcon');
+    const label = document.getElementById('refreshLabel');
+    if (autoRefreshEnabled) {
+        startAutoRefresh();
+        btn.classList.remove('btn-outline-danger');
+        btn.classList.add('btn-outline-secondary');
+        icon.style.animation = 'spin 2s linear infinite';
+        label.textContent = 'Auto';
+        btn.title = 'Pause auto-refresh';
+    } else {
+        stopAutoRefresh();
+        btn.classList.remove('btn-outline-secondary');
+        btn.classList.add('btn-outline-danger');
+        icon.style.animation = 'none';
+        label.textContent = 'Paused';
+        btn.title = 'Resume auto-refresh';
     }
 }
 
-// Initialize auto-refresh on page load
-document.addEventListener('DOMContentLoaded', function() {
-    startAutoRefresh();
-    
-    // Stop auto-refresh when page is not visible
-    document.addEventListener('visibilitychange', function() {
-        if (document.hidden) {
-            stopAutoRefresh();
+// Expiry countdown
+function updateCountdowns() {
+    const now = Math.floor(Date.now() / 1000);
+    document.querySelectorAll('.expiry-countdown').forEach(el => {
+        const expires = parseInt(el.dataset.expires, 10);
+        const diff = expires - now;
+        if (diff <= 0) {
+            el.textContent = 'Expired';
+            el.style.color = '#e74c3c';
         } else {
-            startAutoRefresh();
+            const m = Math.floor(diff / 60);
+            const s = diff % 60;
+            el.textContent = m + 'm ' + String(s).padStart(2, '0') + 's';
+            el.style.color = diff < 300 ? '#f39c12' : '#27ae60';
         }
     });
+}
+
+document.addEventListener('DOMContentLoaded', function() {
+    startAutoRefresh();
+    updateCountdowns();
+    setInterval(updateCountdowns, 1000);
+
+    // Pause when tab hidden, resume when visible
+    document.addEventListener('visibilitychange', function() {
+        if (document.hidden) stopAutoRefresh();
+        else startAutoRefresh();
+    });
+
+    // Spin animation for auto-refresh icon
+    const style = document.createElement('style');
+    style.textContent = '@keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }';
+    document.head.appendChild(style);
+    document.getElementById('refreshIcon').style.animation = 'spin 2s linear infinite';
 });
 </script>
 {% endblock scripts %}

@@ -711,7 +711,11 @@ def create_anti_cheat_blueprint():
     def view_alert(alert_id):
         """View specific alert details"""
         alert = db.session.query(AntiCheatAlert).get_or_404(alert_id)
-        return render_template('anti_cheat_alert.html', alert=alert)
+        solve_count = None
+        if alert.challenge_id:
+            from CTFd.models import Solves
+            solve_count = Solves.query.filter_by(challenge_id=alert.challenge_id).count()
+        return render_template('anti_cheat_alert.html', alert=alert, solve_count=solve_count)
     
     @anti_cheat_bp.route('/alert/<int:alert_id>/resolve', methods=['POST'])
     @admins_only

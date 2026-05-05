@@ -20,7 +20,10 @@ services:
       - .:/opt/CTFd:ro
       - /var/run/docker.sock:/var/run/docker.sock 
     depends_on:
-      - db
+      db:
+        condition: service_started
+      cache:
+        condition: service_started
     networks:
         default:
         internal:

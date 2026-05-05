@@ -946,11 +946,11 @@
 }
 
 .alert-type.sequence-match {
-    background: linear-gradient(135deg, 
-        rgba(99, 102, 241, 0.15) 0%, 
-        rgba(67, 56, 202, 0.1) 100%);
-    color: #6366f1;
-    border: 1px solid rgba(99, 102, 241, 0.2);
+    background: linear-gradient(135deg,
+        rgba(52, 152, 219, 0.15) 0%,
+        rgba(41, 128, 185, 0.1) 100%);
+    color: #3498db;
+    border: 1px solid rgba(52, 152, 219, 0.2);
 }
 
 .alert-time {

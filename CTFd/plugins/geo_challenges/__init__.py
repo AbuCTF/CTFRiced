@@ -207,8 +207,14 @@ class GeoChallengeType(BaseChallenge):
         """
         data = request.form or request.get_json()
         
+        GEO_UPDATABLE_FIELDS = {
+            'name', 'description', 'category', 'value', 'max_attempts', 'state',
+            'latitude', 'longitude', 'tolerance_radius', 'initial', 'minimum', 'decay',
+        }
         for attr, value in data.items():
-            # Handle dynamic scoring fields - convert empty strings to None
+            if attr not in GEO_UPDATABLE_FIELDS:
+                continue
+            # Convert empty strings to None for numeric scoring fields
             if attr in ('initial', 'minimum', 'decay'):
                 if value == '' or value is None:
                     value = None
@@ -217,7 +223,8 @@ class GeoChallengeType(BaseChallenge):
                         value = int(value)
                     except (ValueError, TypeError):
                         value = None
-            setattr(challenge, attr, value)
+            if hasattr(challenge, attr):
+                setattr(challenge, attr, value)
 
         db.session.commit()
         return challenge

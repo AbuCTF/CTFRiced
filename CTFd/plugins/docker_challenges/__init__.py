@@ -1209,9 +1209,14 @@ def create_container(docker, image, team, portbl, challenge_id=None):
         
         headers = {'Content-Type': "application/json"}
         container_config = {
-            "Image": image, 
-            "ExposedPorts": ports, 
-            "HostConfig": {"PortBindings": bindings},
+            "Image": image,
+            "ExposedPorts": ports,
+            "HostConfig": {
+                "PortBindings": bindings,
+                "Memory": 256 * 1024 * 1024,
+                "NanoCpus": 500000000,
+                "PidsLimit": 100,
+            },
             "Labels": labels
         }
         
@@ -1561,8 +1566,11 @@ def create_compose_stack(docker, images, team, challenge_id, primary_service=Non
                 },
                 "HostConfig": {
                     "PortBindings": port_bindings,
-                    "RestartPolicy": {"Name": "unless-stopped"},
-                    "NetworkMode": network_name
+                    "RestartPolicy": {"Name": "no"},
+                    "NetworkMode": network_name,
+                    "Memory": 256 * 1024 * 1024,
+                    "NanoCpus": 500000000,
+                    "PidsLimit": 100,
                 },
                 "Labels": {
                     "ctf.managed": "true",
@@ -1866,12 +1874,15 @@ class DockerChallengeType(BaseChallenge):
                 challenge.primary_service = None
                 current_app.logger.info(f"Single image challenge: {image_name}")
         
-        # Update other attributes normally, excluding docker_image (already handled)
+        # Update allowed attributes only — explicit allowlist to prevent mass assignment
+        UPDATABLE_FIELDS = {
+            'name', 'description', 'category', 'value', 'max_attempts', 'state',
+            'connection_type', 'instance_duration', 'custom_subdomain', 'environment_vars',
+            'docker_config_id',
+        }
         for attr, value in data.items():
-            if attr != 'docker_image':  # Already processed above
-                # Only update if attribute exists on the model
-                if hasattr(challenge, attr):
-                    setattr(challenge, attr, value)
+            if attr in UPDATABLE_FIELDS and hasattr(challenge, attr):
+                setattr(challenge, attr, value)
 
         # Ensure changes are committed
         db.session.flush()
@@ -1976,7 +1987,6 @@ class DockerChallengeType(BaseChallenge):
             'connection_type': getattr(challenge, 'connection_type', 'tcp'),
             'instance_duration': getattr(challenge, 'instance_duration', 15),
             'custom_subdomain': getattr(challenge, 'custom_subdomain', None),
-            'environment_vars': getattr(challenge, 'environment_vars', None),
             
             'type_data': {
                 'id': DockerChallengeType.id,
@@ -2288,16 +2298,15 @@ class ContainerAPI(Resource):
                 if not docker:
                     return {"success": False, "message": f"No available Docker server found for image: {container}"}, 500
                 
-                # Check if container exists in repository (skip if we can't get repo list)
+                # Enforce image allowlist — reject if not present on the server
                 try:
                     repositories = get_repositories(docker, tags=True)
                     if container not in repositories:
-                        current_app.logger.info(f"Container {container} not found in repository list, will attempt to pull")
-                        # Don't abort here - let Docker try to pull the image
+                        current_app.logger.warning(f"Rejected request for unlisted image: {container}")
+                        return {"success": False, "message": "Image not available on this server"}, 403
                 except Exception as e:
-                    current_app.logger.warning(f"Could not get repository list from server {docker.name}: {str(e)}")
-                    current_app.logger.info("Continuing anyway - Docker will attempt to pull image if needed")
-                    # Don't abort here - continue with the container operation
+                    current_app.logger.error(f"Could not verify image allowlist from server {docker.name}: {str(e)}")
+                    return {"success": False, "message": "Could not verify image availability"}, 500
             
             # Get current session
             try:

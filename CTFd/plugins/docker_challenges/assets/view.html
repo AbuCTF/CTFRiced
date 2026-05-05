@@ -288,12 +288,12 @@
 }
 </style>
 
-<div class="docker-challenge-container" id="docker_container" name="{{ challenge.docker_image | safe }}">
+<div class="docker-challenge-container" id="docker_container" name="{{ challenge.docker_image }}">
     <div class="description">Spin up your challenge container.</div>
-    
+
     <div class="docker-control-panel">
         <div class="docker-launch-section">
-            <button onclick="start_container('{{ challenge.docker_image | safe }}');" class="docker-launch-btn">
+            <button onclick="start_container('{{ challenge.docker_image }}');" class="docker-launch-btn">
                 Launch Instance
             </button>
         </div>

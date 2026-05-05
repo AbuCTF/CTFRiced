@@ -2,6 +2,15 @@ CTFd._internal.challenge.data = undefined;
 
 CTFd._internal.challenge.renderer = CTFd._internal.markdown;
 
+function escHtml(str) {
+    return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+}
+
 // Track status intervals for cleanup
 var statusIntervals = {};
 
@@ -96,21 +105,19 @@ function get_docker_status(container) {
                     ports.forEach(port => {
                         port = String(port).replace('/tcp', '');
                         let url;
-                        
+                        const safeHost = escHtml(containerInfo.host);
+                        const safePort = escHtml(port);
+                        const safeSubdomain = customSubdomain ? escHtml(customSubdomain) : '';
+
                         if (customSubdomain) {
-                            // Use custom subdomain
-                            url = `http://${customSubdomain}.h7tex.com:${port}`;
-                        } else if (containerInfo.host.includes('h7tex.com')) {
-                            // Use domain with port
-                            url = `http://${containerInfo.host}:${port}`;
+                            url = `http://${safeSubdomain}.h7tex.com:${safePort}`;
                         } else {
-                            // Fallback to IP with port
-                            url = `http://${containerInfo.host}:${port}`;
+                            url = `http://${safeHost}:${safePort}`;
                         }
-                        
+
                         connectionDetails += `
                             <div class="connection-item" style="margin: 4px 0;">
-                                <a href="${url}" target="_blank" style="color: #60a5fa; text-decoration: none; font-family: monospace; font-size: 13px;">
+                                <a href="${url}" target="_blank" rel="noopener noreferrer" style="color: #60a5fa; text-decoration: none; font-family: monospace; font-size: 13px;">
                                     ${url} <i class="fas fa-external-link-alt" style="font-size: 10px; margin-left: 4px;"></i>
                                 </a>
                             </div>
@@ -120,10 +127,11 @@ function get_docker_status(container) {
                     // TCP challenge - show nc commands
                     ports.forEach(port => {
                         port = String(port).replace('/tcp', '');
-                        const command = `nc ${containerInfo.host} ${port}`;
+                        const safeHost = escHtml(containerInfo.host);
+                        const safePort = escHtml(port);
                         connectionDetails += `
                             <div class="connection-item" style="margin: 4px 0;">
-                                <code style="font-family: monospace; color: #f87171; font-size: 13px;">${command}</code>
+                                <code style="font-family: monospace; color: #f87171; font-size: 13px;">nc ${safeHost} ${safePort}</code>
                             </div>
                         `;
                     });

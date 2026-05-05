@@ -718,26 +718,27 @@ def create_anti_cheat_blueprint():
     def resolve_alert(alert_id):
         """Resolve an alert"""
         try:
-            # Try to validate CSRF token if available
+            # Validate CSRF token — mandatory, not optional
             nonce = request.form.get('nonce')
-            if nonce:
+            if not nonce:
+                return jsonify({'success': False, 'error': 'Missing CSRF token'}), 403
+            try:
+                from CTFd.utils.security.csrf import validate_csrf
+                validate_csrf(nonce)
+            except ImportError:
                 try:
-                    from CTFd.utils.security.csrf import validate_csrf
-                    validate_csrf(nonce)
+                    from CTFd.utils.crypto import verify_csrf_token
+                    verify_csrf_token(nonce)
                 except ImportError:
-                    # Fallback for older CTFd versions
-                    try:
-                        from CTFd.utils.crypto import verify_csrf_token
-                        verify_csrf_token(nonce)
-                    except ImportError:
-                        # If CSRF validation not available, proceed anyway for admin
-                        # Production: Use app.logger.warning() instead
-                        # print("CSRF validation not available, proceeding...")
-                        pass
-                        pass
-            
+                    pass
+
+            VALID_STATUSES = {'resolved', 'dismissed', 'pending'}
+            raw_status = request.form.get('status', 'resolved')
+            if raw_status not in VALID_STATUSES:
+                return jsonify({'success': False, 'error': 'Invalid status value'}), 400
+
             alert = db.session.query(AntiCheatAlert).get_or_404(alert_id)
-            alert.status = request.form.get('status', 'resolved')
+            alert.status = raw_status
             alert.resolved_at = datetime.utcnow()
             # alert.resolved_by = current_user.id  # Would need proper user context
             
@@ -813,6 +814,42 @@ def create_anti_cheat_blueprint():
             db.session.rollback()
             # Production: Use app.logger.error() instead
             # print(f"Error deleting alert: {e}")
+            import traceback
+            traceback.print_exc()
+            return jsonify({'success': False, 'error': str(e)}), 500
+
+    @anti_cheat_bp.route('/resolve-all', methods=['POST'])
+    @admins_only
+    def resolve_all():
+        """Bulk-resolve all open alerts"""
+        try:
+            nonce = request.form.get('nonce')
+            if not nonce:
+                return jsonify({'success': False, 'error': 'Missing CSRF token'}), 403
+            try:
+                from CTFd.utils.security.csrf import validate_csrf
+                validate_csrf(nonce)
+            except ImportError:
+                try:
+                    from CTFd.utils.crypto import verify_csrf_token
+                    verify_csrf_token(nonce)
+                except ImportError:
+                    pass
+
+            open_alerts = AntiCheatAlert.query.filter_by(status='open').all()
+            count = len(open_alerts)
+            for alert in open_alerts:
+                alert.status = 'resolved'
+                alert.resolved_at = datetime.utcnow()
+            db.session.commit()
+
+            return jsonify({
+                'success': True,
+                'resolved_count': count,
+                'message': f'Resolved {count} alert{"s" if count != 1 else ""}.'
+            })
+        except Exception as e:
+            db.session.rollback()
             import traceback
             traceback.print_exc()
             return jsonify({'success': False, 'error': str(e)}), 500

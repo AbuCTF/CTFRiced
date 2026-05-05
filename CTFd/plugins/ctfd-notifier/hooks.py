@@ -35,6 +35,7 @@ def discord_notify(solve, webhookurl, blood_type="First"):
             webhookurl,
             data=json.dumps(data),
             headers={"Content-Type": "application/json"},
+            timeout=5,
         )
     except rq.exceptions.RequestException as e:
         print(e)

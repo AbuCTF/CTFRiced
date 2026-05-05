@@ -1,36 +1,35 @@
-<div role="tabpanel" class="tab-pane config-section" id="telegram">
+<div role="tabpanel" class="tab-pane" id="telegram">
     <form method="POST" autocomplete="off" class="w-100">
         <div class="form-group">
-            <label>
-                Enable telegram Notifier
-            </label>
-            <select class="form-control custom-select" name="telegram_notifier">
-                <option value="true" {% if config.get("telegram_notifier") == "true" %}selected{% endif %}>True</option>
-                <option value="false" {% if config.get("telegram_notifier") == "false" %}selected{% endif %}>False</option>
+            <label class="font-weight-500">Enable Telegram Notifier</label>
+            <select class="form-control" name="telegram_notifier">
+                <option value="true" {% if config.get("telegram_notifier") == "true" %}selected{% endif %}>Enabled</option>
+                <option value="false" {% if config.get("telegram_notifier") != "true" %}selected{% endif %}>Disabled</option>
             </select>
         </div>
         <div class="form-group">
-            <label>
-                Bot Token
-            </label>
-            <input type="text" class="form-control" id="telegram-consumer-key" name="telegram_bot_token" value="{{ config.get("telegram_bot_token") }}">
+            <label class="font-weight-500">Bot Token</label>
+            <input type="password" class="form-control" name="telegram_bot_token"
+                value="{{ config.get('telegram_bot_token', '') }}" autocomplete="new-password"
+                placeholder="123456:ABC-DEF...">
         </div>
-
         <div class="form-group">
-            <label>
-                Chat ID
-            </label>
-            <input type="text" class="form-control" id="telegram-consumer-secret" name="telegram_chat_id" value="{{ config.get("telegram_chat_id") }}">
+            <label class="font-weight-500">Chat ID</label>
+            <input type="text" class="form-control" name="telegram_chat_id"
+                value="{{ config.get('telegram_chat_id', '') }}" placeholder="-1001234567890">
+            <small class="form-text text-muted">Negative for group chats/channels.</small>
         </div>
-
         <div class="form-group">
-            <label>
-                Message Thread ID
+            <label class="font-weight-500">Message Thread ID
+                <small class="text-muted font-weight-normal">— optional, for forum topics</small>
             </label>
-            <input type="text" class="form-control" id="telegram-access-token" name="telegram_message_thread_id" value="{{ config.get("telegram_message_thread_id") }}">
+            <input type="text" class="form-control" name="telegram_message_thread_id"
+                value="{{ config.get('telegram_message_thread_id', '') }}" placeholder="Leave blank if unused">
         </div>
 
-        <input type="hidden" value="{{ Session.nonce }}" name="nonce" id="nonce"/>
-        <button type="submit" class="btn btn-md btn-primary float-right">Update</button>
+        <input type="hidden" value="{{ Session.nonce }}" name="nonce"/>
+        <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary">Save</button>
+        </div>
     </form>
 </div>

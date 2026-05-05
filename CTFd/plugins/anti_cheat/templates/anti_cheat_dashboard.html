@@ -489,7 +489,7 @@
 
     <!-- Alert Filters -->
     <div class="alert-filters mb-4">
-        <div class="d-flex align-items-center justify-content-between">
+        <div class="d-flex align-items-center justify-content-between mb-3">
             <div class="filter-buttons">
                 <button class="filter-btn active" data-filter="active" onclick="filterAlerts('active')">
                     <i class="fas fa-exclamation-triangle"></i>
@@ -522,6 +522,13 @@
                 </label>
             </div>
         </div>
+        <div class="d-flex align-items-center" style="gap: 0.75rem;">
+            <div class="flex-grow-1">
+                <input type="text" id="alertSearch" class="form-control form-control-sm"
+                    placeholder="Search by team, user, challenge, or description..."
+                    oninput="filterAlerts(currentFilter)">
+            </div>
+        </div>
     </div>
 
     <!-- Alerts Table -->
@@ -529,7 +536,13 @@
     <div class="alerts-table">
         <div class="alerts-table-header">
             <h4 class="mb-0">Security Alerts</h4>
-            <span class="badge bg-secondary" id="alertCount">{{ alerts|length }} items</span>
+            <div style="display: flex; align-items: center; gap: 0.75rem;">
+                <span class="badge bg-secondary" id="alertCount">{{ alerts|length }} items</span>
+                <button class="action-btn resolve" id="resolveAllBtn" onclick="resolveAllActive()"
+                    title="Resolve all currently visible active alerts" style="margin: 0;">
+                    <i class="fas fa-check-double" style="margin-right: 0.3rem;"></i>Resolve All Active
+                </button>
+            </div>
         </div>
         <table class="table table-elegant">
             <thead>
@@ -609,41 +622,89 @@
         let currentFilter = 'active';
 
         function filterAlerts(filterType) {
-            currentFilter = filterType;
-            
-            // Update active button
+            if (filterType !== undefined) currentFilter = filterType;
+
             document.querySelectorAll('.filter-btn').forEach(btn => {
                 btn.classList.remove('active');
-                if (btn.dataset.filter === filterType) {
-                    btn.classList.add('active');
-                }
+                if (btn.dataset.filter === currentFilter) btn.classList.add('active');
             });
-            
-            // Filter alerts
+
+            const searchTerm = (document.getElementById('alertSearch')?.value || '').toLowerCase();
             const alertRows = document.querySelectorAll('.alert-row');
             let visibleCount = 0;
-            
+
             alertRows.forEach(row => {
                 const status = row.dataset.status;
                 const severity = row.dataset.severity;
-                
+
                 let showByStatus = false;
-                if (filterType === 'active' && status === 'open') showByStatus = true;
-                if (filterType === 'resolved' && status === 'resolved') showByStatus = true;
-                if (filterType === 'all') showByStatus = true;
-                
-                let showBySeverity = document.querySelector(`.severity-filter[value="${severity}"]`)?.checked || false;
-                
-                if (showByStatus && showBySeverity) {
+                if (currentFilter === 'active' && status === 'open') showByStatus = true;
+                if (currentFilter === 'resolved' && status === 'resolved') showByStatus = true;
+                if (currentFilter === 'all') showByStatus = true;
+
+                const showBySeverity = document.querySelector(`.severity-filter[value="${severity}"]`)?.checked || false;
+
+                const rowText = row.textContent.toLowerCase();
+                const showBySearch = !searchTerm || rowText.includes(searchTerm);
+
+                if (showByStatus && showBySeverity && showBySearch) {
                     row.classList.remove('hidden');
                     visibleCount++;
                 } else {
                     row.classList.add('hidden');
                 }
             });
-            
-            // Update count
-            document.getElementById('alertCount').textContent = `${visibleCount} items`;
+
+            const countEl = document.getElementById('alertCount');
+            if (countEl) countEl.textContent = `${visibleCount} items`;
+        }
+
+        function resolveAllActive() {
+            const activeVisible = [...document.querySelectorAll('.alert-row')]
+                .filter(r => r.dataset.status === 'open' && !r.classList.contains('hidden'));
+            if (activeVisible.length === 0) {
+                alert('No active alerts visible to resolve.');
+                return;
+            }
+            if (!confirm(`Resolve all ${activeVisible.length} active alert(s) shown? This cannot be undone.`)) return;
+
+            const btn = document.getElementById('resolveAllBtn');
+            btn.disabled = true;
+            btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Resolving...';
+
+            fetch('/admin/anti_cheat/resolve-all', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+                body: 'nonce={{ Session.nonce }}'
+            })
+            .then(r => r.json())
+            .then(data => {
+                if (data.success) {
+                    activeVisible.forEach(row => {
+                        row.dataset.status = 'resolved';
+                        const actionCell = row.querySelector('td:last-child');
+                        if (actionCell) {
+                            const resolveBtn = actionCell.querySelector('.resolve');
+                            if (resolveBtn) resolveBtn.parentElement.innerHTML = '<span class="text-muted">Resolved</span>';
+                        }
+                        const timeCell = row.querySelector('td:nth-child(4)');
+                        if (timeCell && !timeCell.innerHTML.includes('Resolved')) {
+                            timeCell.innerHTML += '<br><small class="text-success">✓ Resolved</small>';
+                        }
+                    });
+                    setTimeout(() => filterAlerts(), 100);
+                    if (window.antiCheatDashboard) {
+                        window.antiCheatDashboard.showToast('success', 'Bulk Resolve', data.message);
+                    }
+                } else {
+                    alert('Bulk resolve failed: ' + (data.error || 'Unknown error'));
+                }
+            })
+            .catch(() => alert('Request failed.'))
+            .finally(() => {
+                btn.disabled = false;
+                btn.innerHTML = '<i class="fas fa-check-double" style="margin-right:0.3rem;"></i>Resolve All Active';
+            });
         }
 
         // Dashboard-specific resolve function

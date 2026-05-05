@@ -1,53 +1,43 @@
-<div role="tabpanel" class="tab-pane config-section" id="twitter">
+<div role="tabpanel" class="tab-pane" id="twitter">
     <form method="POST" autocomplete="off" class="w-100">
         <div class="form-group">
-            <label>
-                Enable Twitter Notifier
-            </label>
-            <select class="form-control custom-select" name="twitter_notifier">
-                <option value="true" {% if config.get("twitter_notifier") == "true" %}selected{% endif %}>True</option>
-                <option value="false" {% if config.get("twitter_notifier") == "false" %}selected{% endif %}>False</option>
+            <label class="font-weight-500">Enable Twitter Notifier</label>
+            <select class="form-control" name="twitter_notifier">
+                <option value="true" {% if config.get("twitter_notifier") == "true" %}selected{% endif %}>Enabled</option>
+                <option value="false" {% if config.get("twitter_notifier") != "true" %}selected{% endif %}>Disabled</option>
             </select>
         </div>
         <div class="form-group">
-            <label>
-                Consumer Key
-            </label>
-            <input type="text" class="form-control" id="twitter-consumer-key" name="twitter_consumer_key" value="{{ config.get("twitter_consumer_key") }}">
+            <label class="font-weight-500">Consumer Key</label>
+            <input type="password" class="form-control" name="twitter_consumer_key"
+                value="{{ config.get('twitter_consumer_key', '') }}" autocomplete="new-password">
         </div>
-
         <div class="form-group">
-            <label>
-                Consumer Secret
-            </label>
-            <input type="text" class="form-control" id="twitter-consumer-secret" name="twitter_consumer_secret" value="{{ config.get("twitter_consumer_secret") }}">
+            <label class="font-weight-500">Consumer Secret</label>
+            <input type="password" class="form-control" name="twitter_consumer_secret"
+                value="{{ config.get('twitter_consumer_secret', '') }}" autocomplete="new-password">
         </div>
-
         <div class="form-group">
-            <label>
-                Access Token
-            </label>
-            <input type="text" class="form-control" id="twitter-access-token" name="twitter_access_token" value="{{ config.get("twitter_access_token") }}">
+            <label class="font-weight-500">Access Token</label>
+            <input type="password" class="form-control" name="twitter_access_token"
+                value="{{ config.get('twitter_access_token', '') }}" autocomplete="new-password">
         </div>
-
         <div class="form-group">
-            <label>
-                Access Token Secret
-            </label>
-            <input type="text" class="form-control" id="twitter-access-token-secret" name="twitter_access_token_secret" value="{{ config.get("twitter_access_token_secret") }}">
+            <label class="font-weight-500">Access Token Secret</label>
+            <input type="password" class="form-control" name="twitter_access_token_secret"
+                value="{{ config.get('twitter_access_token_secret', '') }}" autocomplete="new-password">
         </div>
-
         <div class="form-group">
-            <label>
-                Hashtags
-                <small class="form-text text-muted">
-                    Hashtags to add to the Tweet
-                </small>
+            <label class="font-weight-500">Hashtags
+                <small class="text-muted font-weight-normal">— space-separated, include #</small>
             </label>
-            <input type="text" class="form-control" id="twitter-hashtags" name="twitter_hashtags" value="{{ config.get("twitter_hashtags") }}">
+            <input type="text" class="form-control" name="twitter_hashtags"
+                value="{{ config.get('twitter_hashtags', '') }}" placeholder="#CTF #firstblood">
         </div>
 
-        <input type="hidden" value="{{ Session.nonce }}" name="nonce" id="nonce"/>
-        <button type="submit" class="btn btn-md btn-primary float-right">Update</button>
+        <input type="hidden" value="{{ Session.nonce }}" name="nonce"/>
+        <div class="d-flex justify-content-end">
+            <button type="submit" class="btn btn-primary">Save</button>
+        </div>
     </form>
 </div>

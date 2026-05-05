@@ -1,22 +1,89 @@
-<div role="tabpanel" class="tab-pane config-section active" id="discord">
-	<form method="POST" autocomplete="off" class="w-100">
+<div role="tabpanel" class="tab-pane active" id="discord">
+    <form method="POST" autocomplete="off" class="w-100">
         <div class="form-group">
-            <label>
-                Enable Discord Notifier
-            </label>
-            <select class="form-control custom-select" name="discord_notifier">
-                <option value="true" {% if config.get("discord_notifier") == "true" %}selected{% endif %}>True</option>
-                <option value="false" {% if config.get("discord_notifier") == "false" %}selected{% endif %}>False</option>
+            <label class="font-weight-500">Enable Discord Notifier</label>
+            <select class="form-control" name="discord_notifier">
+                <option value="true" {% if config.get("discord_notifier") == "true" %}selected{% endif %}>Enabled</option>
+                <option value="false" {% if config.get("discord_notifier") != "true" %}selected{% endif %}>Disabled</option>
             </select>
         </div>
         <div class="form-group">
-			<label>
-				Discord Webhook URL
-			</label>
-			<input type="text" class="form-control" id="discord-webhook-url" name="discord_webhook_url" value="{{ config.get("discord_webhook_url") }}">
+            <label class="font-weight-500">Discord Webhook URL</label>
+            <div class="input-group">
+                <input type="password" class="form-control" id="discord-webhook-url" name="discord_webhook_url"
+                    value="{{ config.get('discord_webhook_url', '') }}" autocomplete="new-password"
+                    placeholder="https://discord.com/api/webhooks/...">
+                <div class="input-group-append">
+                    <button type="button" class="btn btn-outline-secondary" id="discord-toggle-visibility"
+                        onclick="toggleVisibility('discord-webhook-url', this)" title="Show/hide URL">
+                        <i class="fas fa-eye"></i>
+                    </button>
+                </div>
+            </div>
+            <small class="form-text text-muted">Must be a valid discord.com or discordapp.com webhook URL.</small>
         </div>
 
-        <input type="hidden" value="{{ Session.nonce }}" name="nonce" id="nonce" />
-        <button type="submit" class="btn btn-md btn-primary float-right">Update</button>
-	</form>
+        <input type="hidden" value="{{ Session.nonce }}" name="nonce" id="nonce"/>
+        <div class="d-flex justify-content-end gap-2" style="gap: 0.5rem;">
+            <button type="button" class="btn btn-outline-secondary" id="discord-test-btn" onclick="testDiscord()">
+                <i class="fas fa-paper-plane" style="margin-right: 0.4rem;"></i>Send Test
+            </button>
+            <button type="submit" class="btn btn-primary">Save</button>
+        </div>
+    </form>
+
+    <div id="discord-test-result" class="mt-3" style="display:none;"></div>
 </div>
+
+<script>
+function toggleVisibility(inputId, btn) {
+    const input = document.getElementById(inputId);
+    const icon = btn.querySelector('i');
+    if (input.type === 'password') {
+        input.type = 'text';
+        icon.className = 'fas fa-eye-slash';
+    } else {
+        input.type = 'password';
+        icon.className = 'fas fa-eye';
+    }
+}
+
+function testDiscord() {
+    const url = document.getElementById('discord-webhook-url').value;
+    const resultDiv = document.getElementById('discord-test-result');
+    const btn = document.getElementById('discord-test-btn');
+
+    if (!url) {
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<div class="alert alert-warning">Enter a webhook URL first.</div>';
+        return;
+    }
+
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin" style="margin-right: 0.4rem;"></i>Sending...';
+    resultDiv.style.display = 'none';
+
+    fetch('/admin/notifier/test_discord', {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json', 'CSRF-Token': document.getElementById('nonce').value},
+        body: JSON.stringify({webhook_url: url})
+    })
+    .then(r => r.json())
+    .then(data => {
+        resultDiv.style.display = 'block';
+        if (data.success) {
+            resultDiv.innerHTML = '<div class="alert alert-success"><i class="fas fa-check-circle" style="margin-right:0.4rem;"></i>' + data.message + '</div>';
+        } else {
+            resultDiv.innerHTML = '<div class="alert alert-danger"><i class="fas fa-times-circle" style="margin-right:0.4rem;"></i>' + data.message + '</div>';
+        }
+    })
+    .catch(() => {
+        resultDiv.style.display = 'block';
+        resultDiv.innerHTML = '<div class="alert alert-danger">Request failed.</div>';
+    })
+    .finally(() => {
+        btn.disabled = false;
+        btn.innerHTML = '<i class="fas fa-paper-plane" style="margin-right: 0.4rem;"></i>Send Test';
+    });
+}
+</script>

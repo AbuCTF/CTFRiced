@@ -1,43 +1,102 @@
 {% extends "admin/base.html" %}
 
 {% block content %}
-<div class="jumbotron">
-	<div class="container">
-		<h1>Notifier Configuration</h1>
-	</div>
+<style>
+.notifier-header {
+    background: linear-gradient(135deg, #2c3e50 0%, #34495e 100%);
+    color: white;
+    padding: 2rem 0;
+    margin-bottom: 2rem;
+    border-bottom: 3px solid #3498db;
+}
+.notifier-header h1 {
+    font-weight: 300;
+    font-size: 2rem;
+    margin-bottom: 0.5rem;
+}
+.notifier-header p {
+    font-weight: 300;
+    opacity: 0.9;
+    font-size: 0.95rem;
+    margin: 0;
+}
+.notifier-card {
+    background: white;
+    border: 1px solid #e8e8e8;
+    border-radius: 6px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.05);
+    overflow: hidden;
+}
+.nav-pills .nav-link {
+    border-radius: 4px;
+    color: #495057;
+    font-size: 0.9rem;
+    padding: 0.6rem 1rem;
+    margin-bottom: 0.25rem;
+}
+.nav-pills .nav-link.active {
+    background-color: #3498db;
+    color: white;
+}
+.nav-pills .nav-link:hover:not(.active) {
+    background: #f8f9fa;
+    color: #2c3e50;
+}
+.service-icon {
+    width: 20px;
+    text-align: center;
+    margin-right: 0.5rem;
+    opacity: 0.8;
+}
+</style>
+
+<div class="notifier-header">
+    <div class="container">
+        <h1><i class="fas fa-bell" style="margin-right: 0.75rem; opacity: 0.9;"></i>Notifier Configuration</h1>
+        <p>Configure first-blood notifications for Discord, Twitter, and Telegram.</p>
+    </div>
 </div>
+
 <div class="container">
-	<div class="row">
-		<div class="col-md-3">
-			<ul class="nav nav-pills flex-column">
-				<li class="nav-item">
-					<a class="nav-link rounded-0 active" href="#discord" role="tab" data-toggle="tab">Discord Notifier</a>
+    <div class="row">
+        <div class="col-md-3">
+            <ul class="nav nav-pills flex-column">
+                <li class="nav-item">
+                    <a class="nav-link active" href="#discord" role="tab" data-toggle="tab">
+                        <i class="fab fa-discord service-icon"></i>Discord
+                    </a>
                 </li>
                 <li class="nav-item">
-					<a class="nav-link rounded-0" href="#twitter" role="tab" data-toggle="tab">Twitter Notifier</a>
-				</li>
-				<li class="nav-item">
-					<a class="nav-link rounded-0" href="#telegram" role="tab" data-toggle="tab">Telegram Notifier</a>
-				</li>
-			</ul>
-		</div>
-		<div class="col-md-9">
-			{% for error in errors %}
-				<div class="alert alert-danger alert-dismissable" role="alert">
-					<span class="sr-only">Error:</span>
-					{{ error }}
-					<button type="button" class="close" data-dismiss="alert" aria-label="Close">
-						<span aria-hidden="true">×</span>
-					</button>
-				</div>
-			{% endfor %}
+                    <a class="nav-link" href="#twitter" role="tab" data-toggle="tab">
+                        <i class="fab fa-twitter service-icon"></i>Twitter
+                    </a>
+                </li>
+                <li class="nav-item">
+                    <a class="nav-link" href="#telegram" role="tab" data-toggle="tab">
+                        <i class="fab fa-telegram service-icon"></i>Telegram
+                    </a>
+                </li>
+            </ul>
+        </div>
+        <div class="col-md-9">
+            {% for error in errors %}
+            <div class="alert alert-danger alert-dismissable" role="alert">
+                <span class="sr-only">Error:</span>
+                {{ error }}
+                <button type="button" class="close" data-dismiss="alert" aria-label="Close">
+                    <span aria-hidden="true">&times;</span>
+                </button>
+            </div>
+            {% endfor %}
 
-			<div class="tab-content">
-                {% include "ctfd_notifier/configs/discord.html" %}
-                {% include "ctfd_notifier/configs/twitter.html" %}
-				{% include "ctfd_notifier/configs/telegram.html" %}
-			</div>
-		</div>
-	</div>
+            <div class="notifier-card">
+                <div class="tab-content p-4">
+                    {% include "ctfd_notifier/configs/discord.html" %}
+                    {% include "ctfd_notifier/configs/twitter.html" %}
+                    {% include "ctfd_notifier/configs/telegram.html" %}
+                </div>
+            </div>
+        </div>
+    </div>
 </div>
 {% endblock %}

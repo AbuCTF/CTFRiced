@@ -113,11 +113,15 @@ CTFd.plugin.run((_CTFd) => {
                     });
                 }
                 
-                // Auto-select multi-image challenge type
-                $('#multi_image').prop('checked', true).trigger('change');
+                // Auto-select multi-image challenge type (only if not already set)
+                if (!$('#multi_image').prop('checked')) {
+                    $('#multi_image').prop('checked', true).trigger('change');
+                }
             } else if (itemType === 'single') {
-                // Single image selected - auto-select single challenge type
-                $('#single_image').prop('checked', true).trigger('change');
+                // Single image selected - auto-select single challenge type (only if not already set)
+                if (!$('#single_image').prop('checked')) {
+                    $('#single_image').prop('checked', true).trigger('change');
+                }
             }
         });
         

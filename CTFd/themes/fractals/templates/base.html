@@ -144,11 +144,6 @@ html body *::after {
 }
 
 /* Specifically target and remove any green accent color click effects */
-html body *[style*="rgba(100, 255, 218"],
-html body *[style*="rgb(100, 255, 218"],
-html body *[style*="#64ffda"] {
-    display: none !important;
-}
 
 /* Remove any click ripple animations with green colors */
 html body .ripple-effect,
@@ -2349,6 +2344,129 @@ body:has(.homepage-wrapper) main {
     border-color: rgba(37, 99, 235, 0.8) !important;
 }
 
+/* ── Professional button overrides ── */
+.btn {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif !important;
+    font-weight: 500 !important;
+    font-size: 0.875rem !important;
+    letter-spacing: 0.01em !important;
+    border-radius: 6px !important;
+    padding: 0.5rem 1.25rem !important;
+    transition: background-color 0.15s ease, border-color 0.15s ease, color 0.15s ease !important;
+    box-shadow: none !important;
+}
+
+.btn-primary {
+    background-color: #1e293b !important;
+    border: 1px solid #334155 !important;
+    color: #e2e8f0 !important;
+}
+.btn-primary:hover, .btn-primary:focus {
+    background-color: #273548 !important;
+    border-color: #475569 !important;
+    color: #f1f5f9 !important;
+}
+.btn-primary:active {
+    background-color: #0f172a !important;
+    border-color: #334155 !important;
+}
+
+.btn-secondary {
+    background-color: #0f172a !important;
+    border: 1px solid #1e293b !important;
+    color: #94a3b8 !important;
+}
+.btn-secondary:hover, .btn-secondary:focus {
+    background-color: #1e293b !important;
+    border-color: #334155 !important;
+    color: #cbd5e1 !important;
+}
+
+.btn-success {
+    background-color: #14352a !important;
+    border: 1px solid #1e4d3a !important;
+    color: #6ee7b7 !important;
+}
+.btn-success:hover, .btn-success:focus {
+    background-color: #1a4233 !important;
+    border-color: #2d6a50 !important;
+    color: #a7f3d0 !important;
+}
+
+.btn-danger {
+    background-color: #2d1a1a !important;
+    border: 1px solid #431f1f !important;
+    color: #fca5a5 !important;
+}
+.btn-danger:hover, .btn-danger:focus {
+    background-color: #3b2020 !important;
+    border-color: #5c2929 !important;
+    color: #fecaca !important;
+}
+
+.btn-warning {
+    background-color: #2d2210 !important;
+    border: 1px solid #423318 !important;
+    color: #fcd34d !important;
+}
+.btn-warning:hover, .btn-warning:focus {
+    background-color: #3a2c14 !important;
+    border-color: #5a4520 !important;
+    color: #fde68a !important;
+}
+
+.btn-info {
+    background-color: #0c2340 !important;
+    border: 1px solid #163359 !important;
+    color: #7dd3fc !important;
+}
+.btn-info:hover, .btn-info:focus {
+    background-color: #112d50 !important;
+    border-color: #1e4a77 !important;
+    color: #bae6fd !important;
+}
+
+.btn-light {
+    background-color: #1e293b !important;
+    border: 1px solid #334155 !important;
+    color: #cbd5e1 !important;
+}
+.btn-light:hover {
+    background-color: #273548 !important;
+    color: #e2e8f0 !important;
+}
+
+.btn-dark {
+    background-color: #0f172a !important;
+    border: 1px solid #1e293b !important;
+    color: #94a3b8 !important;
+}
+.btn-dark:hover {
+    background-color: #1e293b !important;
+    color: #cbd5e1 !important;
+}
+
+[data-bs-theme="light"] .btn-primary {
+    background-color: #1e293b !important;
+    border-color: #334155 !important;
+    color: #f1f5f9 !important;
+}
+[data-bs-theme="light"] .btn-primary:hover {
+    background-color: #0f172a !important;
+    border-color: #1e293b !important;
+}
+
+[data-bs-theme="light"] .btn-secondary {
+    background-color: #f1f5f9 !important;
+    border-color: #cbd5e1 !important;
+    color: #475569 !important;
+}
+[data-bs-theme="light"] .btn-secondary:hover {
+    background-color: #e2e8f0 !important;
+    border-color: #94a3b8 !important;
+    color: #1e293b !important;
+}
+
     </style>
   {% endblock %}
 
@@ -2389,15 +2507,7 @@ body:has(.homepage-wrapper) main {
 
 {% include "components/snackbar.html" %}
 
-<footer class="footer">
-  <div class="container text-center">
-    <a href="https://ctfd.io" class="text-secondary">
-      <small class="text-muted">
-        {% trans %}Powered by CTFd{% endtrans %}
-      </small>
-    </a>
-  </div>
-</footer>
+<footer class="footer"></footer>
 
 {% include "components/notifications.html" %}
 

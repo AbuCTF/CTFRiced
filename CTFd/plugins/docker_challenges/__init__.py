@@ -2240,20 +2240,30 @@ class ContainerAPI(Resource):
                 
 
                 
+            # Prefer challenge_id (numeric) over challenge name to avoid collisions
+            # when multiple challenges share the same name across categories.
+            challenge_id_param = request.args.get('challenge_id')
             challenge = request.args.get('challenge')
-            if not challenge:
-                return {"success": False, "message": "No challenge name specified"}, 403
-                
-            # Basic input validation
-            if not isinstance(challenge, str) or len(challenge) > 256:
-                return {"success": False, "message": "Invalid challenge name"}, 400
-            
-            # Get challenge ID from challenge name - use Challenges table, not DockerChallenge
             from CTFd.models import Challenges
-            challenge_obj = Challenges.query.filter_by(name=challenge).first()
-            if not challenge_obj:
-                return {"success": False, "message": f"Challenge '{challenge}' not found"}, 404
-            challenge_id = challenge_obj.id
+            if challenge_id_param:
+                try:
+                    challenge_obj = Challenges.query.filter_by(id=int(challenge_id_param)).first()
+                    if not challenge_obj:
+                        return {"success": False, "message": f"Challenge ID {challenge_id_param} not found"}, 404
+                    challenge = str(challenge_obj.id)
+                    challenge_id = challenge_obj.id
+                except (ValueError, TypeError):
+                    return {"success": False, "message": "Invalid challenge_id"}, 400
+            elif challenge:
+                if not isinstance(challenge, str) or len(challenge) > 256:
+                    return {"success": False, "message": "Invalid challenge name"}, 400
+                challenge_obj = Challenges.query.filter_by(name=challenge).first()
+                if not challenge_obj:
+                    return {"success": False, "message": f"Challenge '{challenge}' not found"}, 404
+                challenge = str(challenge_obj.id)
+                challenge_id = challenge_obj.id
+            else:
+                return {"success": False, "message": "No challenge specified"}, 403
             
             # Get DockerChallenge info if this is a docker challenge
             docker_challenge_obj = None
@@ -2724,6 +2734,7 @@ class DockerStatus(Resource):
                 'host': display_host,
                 'server_name': i.docker_config.name if i.docker_config else 'Unknown Server',
                 'challenge_name': i.challenge,
+                'challenge_id': i.challenge if (i.challenge and i.challenge.isdigit()) else None,
                 'is_primary': i.is_primary if hasattr(i, 'is_primary') else False
             })
         

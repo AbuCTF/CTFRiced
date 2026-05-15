@@ -50,8 +50,9 @@ function get_docker_status(container) {
         return; // Skip if updated within last 10 seconds
     }
     
-    // Get challenge name from CTFd data
+    // Get challenge name and ID from CTFd data
     const challenge_name = CTFd._internal.challenge.data.name;
+    const challenge_id = CTFd._internal.challenge.data.id;
     
     // Use CTFd.fetch to call the API
     CTFd.fetch('/api/v1/docker_status', {
@@ -71,7 +72,7 @@ function get_docker_status(container) {
         // For multi-image challenges, we need to find containers that belong to the same challenge
         // rather than matching docker_image names exactly
         result.data.forEach(item => {
-            if (item.challenge_name === challenge_name) {
+            if (item.challenge_id && String(item.challenge_id) === String(challenge_id)) {
                 containerFound = true;
                 if (!containerInfo || item.is_primary) {
                     containerInfo = item;
@@ -340,7 +341,7 @@ function stop_container(container) {
         CTFd.lib.$('#docker_container').html(loadingHTML);
         
         CTFd.fetch("/api/v1/container?name=" + encodeURIComponent(container) + 
-                   "&challenge=" + encodeURIComponent(CTFd._internal.challenge.data.name) + 
+                   "&challenge_id=" + encodeURIComponent(CTFd._internal.challenge.data.id) + 
                    "&stopcontainer=True", {
             method: "GET"
         })
@@ -397,7 +398,7 @@ function revert_container(container) {
     
     // First, stop the existing container
     CTFd.fetch("/api/v1/container?name=" + encodeURIComponent(container) + 
-               "&challenge=" + encodeURIComponent(CTFd._internal.challenge.data.name) + 
+               "&challenge_id=" + encodeURIComponent(CTFd._internal.challenge.data.id) + 
                "&stopcontainer=True", {
         method: "GET"
     })
@@ -412,7 +413,7 @@ function revert_container(container) {
                 
                 // Now start a new container
                 CTFd.fetch("/api/v1/container?name=" + encodeURIComponent(container) + 
-                          "&challenge=" + encodeURIComponent(CTFd._internal.challenge.data.name), {
+                          "&challenge_id=" + encodeURIComponent(CTFd._internal.challenge.data.id), {
                     method: "GET"
                 })
                 .then(function (startResponse) {
@@ -479,7 +480,7 @@ function start_container(container) {
     `;
     CTFd.lib.$('#docker_container').html(loadingHTML);
     
-    CTFd.fetch("/api/v1/container?name=" + encodeURIComponent(container) + "&challenge=" + encodeURIComponent(CTFd._internal.challenge.data.name), {
+    CTFd.fetch("/api/v1/container?name=" + encodeURIComponent(container) + "&challenge_id=" + encodeURIComponent(CTFd._internal.challenge.data.id), {
         method: "GET"
     }).then(function (response) {
         if (response.ok) {
